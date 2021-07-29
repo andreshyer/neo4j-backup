@@ -71,7 +71,7 @@ def gather_labels(project_dir_path, relationships):
     new_relationships = []
     for node_file in node_files:
         nodes = decompress_json(node_file)
-        node_keys = list(nodes.keys())
+        node_keys = set(nodes.keys())
         for relationship in relationships:
 
             if relationship['start_node'] in node_keys:
