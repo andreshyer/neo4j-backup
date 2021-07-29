@@ -42,7 +42,7 @@ For now, this repo can be downloaded and used from source
 # Usage
 
 The exact parameters that should be used to access the database depends on the version of the Neo4j graph that you
-are trying to access. The python neo4j-driver documentation can be found at 
+are trying to access. The python neo4j-driver documentation can be found at https://neo4j.com/docs/api/python-driver/current/api.html.
 
 ## Extracting
 
