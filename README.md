@@ -92,7 +92,7 @@ if __name__ == "__main__":
     database = "neo4j"
 
     project_dir = "data_dump"
-    input_yes = True
+    input_yes = False
     importer = Importer(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes)
     importer.import_data()
 ```
