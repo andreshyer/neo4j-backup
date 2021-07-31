@@ -8,20 +8,23 @@ a Neo4j database in a human-readable format.
 Using this repo to backup Neo4j data will not be faster than the built-in dump file that Neo4j provides. 
 But, there are some instances where using a tool like this is useful. 
 Such as moving data from Neo4j to a different type of database that is not Neo4j, 
-or storing backups in different formats encase something happens to the original dump file backup.
+storing backups in different formats encase something happens to the original dump file backup,
+or having to safely downgrade a Neo4j graph.
+
 
 Also, this repo aims to be as simplistic as possible with two main purposes. 
-To download a Neo4j graph without using dumps file and to be able to upload that data to a different Neo4j graph.
+To download a Neo4j graph without using a dump file and to be able to upload that data to a different Neo4j graph.
 Only simple cypher statements are used to import and extract data from Neo4j.
-The data is downloaded as a json files and compressed with gzip compression format.
+The data is downloaded as a json files.
 
 When creating this tool, Enterprise tools were not used. 
 Meaning that APOC or any other Enterprise/Desktop exclusive tool is not needed, 
 and this can be used on the community edition of Neo4j. 
 
 This repo differs from most other Neo4j backup repos in that the Neo4j graph does not need to be a specific instance. 
-This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. The only
-requirements are that the python neo4j-driver need to be able to connect to the database and that your user has read privileges.
+This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
+The only requirements are that the python neo4j-driver need to be able to connect to the database,
+and that your user has read privileges.
 
 # Packages required
 
@@ -29,7 +32,7 @@ requirements are that the python neo4j-driver need to be able to connect to the 
 
 `neo4j: >= 4.3.0`
 
-`tqdm: >= 4.10.0` : tqdm will be optional in the future 
+`tqdm: >= 4.10.0`
 
 # Installation
 
@@ -42,44 +45,75 @@ For now, this repo can be downloaded and used from source
 # Usage
 
 The exact parameters that should be used to access the database depends on the version of the Neo4j graph that you
-are trying to access. The python neo4j-driver documentation can be found at https://neo4j.com/docs/api/python-driver/current/api.html.
+are trying to access. The python neo4j-driver documentation can be found at 
+https://neo4j.com/docs/api/python-driver/current/api.html.
+
+There will be times when the script ask the user for input for (y/N) questions, 
+you can set `input_yes=True` to enter yes to all input questions.
 
 ## Extracting
 
 ```python
+from neo4j import GraphDatabase
 from neo4j_backup import Extractor
 
 if __name__ == "__main__":
+
     uri = "neo4j://localhost:7687"
-    database = "neo4j"
     username = "neo4j"
     password = "password"
     encrypted = False
     trust = "TRUST_ALL_CERTIFICATES"
+    driver = GraphDatabase.driver(uri, auth=(username, password), encrypted=encrypted, trust=trust)
+
+    database = "neo4j"
 
     project_dir = "data_dump"
-
-    extractor = Extractor(project_dir="data_dump", uri=uri, database=database, username=username, password=password,
-                          encrypted=encrypted, trust=trust)
+    input_yes = False
+    extractor = Extractor(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes)
     extractor.extract_data()
 ```
 
 ## Importing
 
 ```python
+from neo4j import GraphDatabase
 from neo4j_backup import Importer
 
 if __name__ == "__main__":
+
     uri = "neo4j://localhost:7687"
-    database = "neo4j"
     username = "neo4j"
     password = "password"
     encrypted = False
     trust = "TRUST_ALL_CERTIFICATES"
+    driver = GraphDatabase.driver(uri, auth=(username, password), encrypted=encrypted, trust=trust)
+
+    database = "neo4j"
 
     project_dir = "data_dump"
-
-    importer = Importer(project_dir="data_dump", uri=uri, database=database, username=username, password=password,
-                        encrypted=encrypted, trust=trust)
+    input_yes = True
+    importer = Importer(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes)
     importer.import_data()
 ```
+
+# Notes
+
+Please do note that when importing, an internal ID property is made when creating Nodes and properties. 
+Since this script does not read the underlying file in the Neo4j database, 
+some unique identifier is needed to MERGE and MATCH nodes on.
+Forcing the user to pass a map of unique keys for each NODE is not reasonable.
+This dummy internal ID property is removed from each Node at the very end.
+The Neo4j database still stores that this property existed at some point on a Node,
+so the property will show up on the left side of the Neo4j Browser and when running "CALL db.propertyKeys()".
+The dummy property key can not be removed from the list of internal property keys, and the issue is reported at
+https://github.com/neo4j/neo4j/issues/10941.
+
+If you need to extract data from a database with this tool, 
+and are importing to a database where you have access to the neo4j-admin console.
+One option is to use the Importer from neo4j_import to import the initial data into a database,
+then dump that database and restore it to a new database. 
+Or, you can use a tool like store-utils https://github.com/jexp/store-utils.
+
+This really is not so much an issue, more so as an inconvenience. If you are using the Neo4j Browser,
+it is highly recommended to just use the built-in dump tool.
