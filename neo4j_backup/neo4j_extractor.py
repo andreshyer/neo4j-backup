@@ -13,7 +13,8 @@ from ._backends import to_json, get_unique_prop_key
 
 class Extractor:
 
-    def __init__(self, project_dir, driver: GraphDatabase.driver, database: str = "neo4j", input_yes: bool = False):
+    def __init__(self, project_dir, driver: GraphDatabase.driver, database: str = "neo4j", input_yes: bool = False,
+                 compress: bool = True):
 
         """
         The purpose of this class is to extract all the information from a neo4j graph
@@ -22,6 +23,7 @@ class Extractor:
         :param driver: Neo4j driver
         :param input_yes: bool, determines weather to just type in "y" for all input options. Be careful when running
             this option
+        :param compress: bool, weather or not to compress files as they are being extracted
         """
 
         self.project_dir: Path = Path(getcwd()) / project_dir
@@ -29,6 +31,7 @@ class Extractor:
         self.driver: GraphDatabase.driver = driver
         self.database: str = database
         self.input_yes: bool = input_yes
+        self.compress: bool = compress
 
         self.property_keys: set[str] = set()
         self.labels: set[str] = set()
@@ -84,6 +87,7 @@ class Extractor:
         to_json(file_path=self.project_dir / "property_keys.json", data=list(self.property_keys))
         to_json(file_path=self.project_dir / "labels.json", data=list(self.labels))
         to_json(file_path=self.project_dir / "types.json", data=list(self.rel_types))
+        to_json(file_path=self.project_dir / "compressed.json", data=self.compress)
 
     def _test_connection(self):
         try:
@@ -153,12 +157,12 @@ class Extractor:
                 if index % 1000 == 0 and index != 0:
                     size_in_ram = getsizeof(extracted_data)
                     if size_in_ram > self.json_file_size:
-                        to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data)
+                        to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data, compress=self.compress)
                         extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data)
+                to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data, compress=self.compress)
 
     def _pull_relationships(self):
 
@@ -206,12 +210,12 @@ class Extractor:
                 if index % 1000 == 0 and index != 0:
                     size_in_ram = getsizeof(extracted_data)
                     if size_in_ram > self.json_file_size:
-                        to_json(self.data_dir / f"relationships_{index}.json", extracted_data)
+                        to_json(self.data_dir / f"relationships_{index}.json", extracted_data, compress=self.compress)
                         extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"relationships_{index}.json", extracted_data)
+                to_json(self.data_dir / f"relationships_{index}.json", extracted_data, compress=self.compress)
 
     def _calc_unique_prop_key(self):
         keys_to_avoid = self.property_keys.copy()

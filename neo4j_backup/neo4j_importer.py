@@ -28,6 +28,7 @@ class Importer:
         self.database: str = database
         self.input_yes: bool = input_yes
 
+        self.compressed: bool = from_json(self.project_dir / "compressed.json")
         self.unique_prop_key: str = from_json(self.project_dir / f"unique_prop_key.json")
         self.labels: list[str] = from_json(self.project_dir / 'labels.json')
         self.relationship_types: list[str] = from_json(self.project_dir / 'types.json')
@@ -131,7 +132,7 @@ class Importer:
         :return:
         """
 
-        nodes = from_json(file_path)
+        nodes = from_json(file_path, compressed=self.compressed)
 
         for label in self.labels:
 
@@ -168,7 +169,7 @@ class Importer:
         :return:
         """
 
-        relationships = from_json(file_path)
+        relationships = from_json(file_path, compressed=self.compressed)
 
         for relationship_type in tqdm(self.relationship_types,
                                       desc=f"Importing Relationships in file ({i}/{len(self.relationships_files)})"):

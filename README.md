@@ -5,17 +5,19 @@ a Neo4j database in a human-readable format.
 
 # Overview
 
-Using this repo to backup Neo4j data will not be faster than the built-in dump file that Neo4j provides. 
-But, there are some instances where using a tool like this is useful. 
+Using this repo to backup Neo4j data will not be faster than the built-in dump file that Neo4j provides,
+and this repo is not intended to replace dump files.
+There are some instances where using a tool like this is useful.
 Such as moving data from Neo4j to a different type of database that is not Neo4j, 
 storing backups in different formats encase something happens to the original dump file backup,
 or having to safely downgrade a Neo4j graph.
 
-
 Also, this repo aims to be as simplistic as possible with two main purposes. 
 To download a Neo4j graph without using a dump file and to be able to upload that data to a different Neo4j graph.
 Only simple cypher statements are used to import and extract data from Neo4j.
-The data is downloaded as a json files.
+The data is downloaded as json files.
+The json files are compressed with gzip protocol by default,
+but you can choose to export the data without compressing.
 
 When creating this tool, Enterprise tools were not used. 
 Meaning that APOC or any other Enterprise/Desktop exclusive tool is not needed, 
@@ -23,8 +25,8 @@ and this can be used on the community edition of Neo4j.
 
 This repo differs from most other Neo4j backup repos in that the Neo4j graph does not need to be a specific instance. 
 This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
-The only requirements are that the python neo4j-driver need to be able to connect to the database,
-and that your user has read privileges.
+The only requirements are that the python neo4j-driver needs to be able to connect to the database,
+that your user has read privileges for downloading data, and write privileges for importing data.
 
 # Packages required
 
@@ -70,7 +72,8 @@ if __name__ == "__main__":
 
     project_dir = "data_dump"
     input_yes = False
-    extractor = Extractor(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes)
+    compress = True
+    extractor = Extractor(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes, compress=compress)
     extractor.extract_data()
 ```
 
@@ -101,7 +104,7 @@ if __name__ == "__main__":
 
 Please do note that when importing, an internal ID property is made when creating Nodes and properties. 
 Since this script does not read the underlying file in the Neo4j database, 
-some unique identifier is needed to MERGE and MATCH nodes on.
+some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each NODE is not reasonable.
 This dummy internal ID property is removed from each Node at the very end.
 The Neo4j database still stores that this property existed at some point on a Node,
@@ -115,5 +118,6 @@ One option is to use the Importer from neo4j_import to import the initial data i
 then dump that database and restore it to a new database. 
 Or, you can use a tool like store-utils https://github.com/jexp/store-utils.
 
-This really is not so much an issue, more so as an inconvenience. If you are using the Neo4j Browser,
+This really is not so much an issue, more so as an inconvenience.
+If you are using the Neo4j Browser,
 it is highly recommended to just use the built-in dump tool.
