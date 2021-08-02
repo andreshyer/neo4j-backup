@@ -17,6 +17,7 @@ Classifier: Programming Language :: Python :: 3.8
 Classifier: Programming Language :: Python :: 3.9
 Requires-Python: >=3.5
 Description-Content-Type: text/markdown
+License-File: LICENSE
 
 # neo4j-backup
 This is a project that is designed at downloading and uploading data in Neo4j Knowledge Graphs without Neo4j 
@@ -57,11 +58,7 @@ that your user has read privileges for downloading data, and write privileges fo
 
 # Installation
 
-This is coming eventually, but will likely look like
-
 `pip install neo4j-backup`
-
-For now, this repo can be downloaded and used from source
 
 # Usage
 

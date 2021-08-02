@@ -1,3 +1,4 @@
+LICENSE
 README.md
 setup.py
 neo4j_backup/__init__.py
