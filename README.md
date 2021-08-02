@@ -5,9 +5,8 @@ a Neo4j database in a human-readable format.
 
 # Overview
 
-Using this repo to backup Neo4j data will not be faster than the built-in dump file that Neo4j provides,
-and this repo is not intended to replace dump files.
-There are some instances where using a tool like this is useful.
+This repo is not intended to replace the naive Neo4j backup dump files,
+but rather to be used in instances where a dump file is not an option.
 Such as moving data from Neo4j to a different type of database that is not Neo4j, 
 storing backups in different formats encase something happens to the original dump file backup,
 or having to safely downgrade a Neo4j graph.
@@ -106,10 +105,10 @@ Please do note that when importing, an internal ID property is made when creatin
 Since this script does not read the underlying file in the Neo4j database, 
 some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each NODE is not reasonable.
-This dummy internal ID property is removed from each Node at the very end.
+This temporary internal ID property is removed from each Node at the very end.
 The Neo4j database still stores that this property existed at some point on a Node,
 so the property will show up on the left side of the Neo4j Browser and when running "CALL db.propertyKeys()".
-The dummy property key can not be removed from the list of internal property keys, and the issue is reported at
+The temporary property key can not be removed from the list of internal property keys, and the issue is reported at
 https://github.com/neo4j/neo4j/issues/10941.
 
 If you need to extract data from a database with this tool, 

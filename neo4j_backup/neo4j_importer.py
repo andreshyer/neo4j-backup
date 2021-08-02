@@ -5,7 +5,7 @@ from os import getcwd, listdir
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
-from ._backends import from_json
+from ._backends import from_json, to_json
 
 
 class Importer:
@@ -102,7 +102,7 @@ class Importer:
         with self.driver.session(database=self.database) as session:
 
             # Create dummy constraints on each node label, helps speed up inserting significantly
-            for node_labels in self.labels:
+            for node_labels in tqdm(self.labels, desc='Applying Temporary Constraints'):
                 node_labels = node_labels.split(":")
                 for node_label in node_labels:
                     constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} IF NOT EXISTS ON " \
@@ -132,29 +132,34 @@ class Importer:
         :return:
         """
 
-        nodes = from_json(file_path, compressed=self.compressed)
+        # Create skeleton indexing scheme
+        indexed_nodes = {}
 
-        for label in self.labels:
+        # Index nodes
+        for node in from_json(file_path, compressed=self.compressed):
 
-            query = f"""
+            row = {'node_id': node['node_id'], 'properties': node['node_props']}
 
-                UNWIND $rows as row
-                    CREATE (a:{label} {'{'}{self.unique_prop_key}: row.node_id{'}'})
-                        SET a += row.properties
+            node_labels = node['node_labels']
 
-            """
+            if node_labels in indexed_nodes.keys():
+                indexed_nodes[node['node_labels']].append(row)
+            else:
+                indexed_nodes[node_labels] = [row]
 
-            # Grab all nodes that have the same label as the working label
-            filtered_nodes = []
-            for node in nodes:
-                node_labels = node['node_labels']
-                if label == node_labels:
+        with self.driver.session(database=self.database) as session:
 
-                    # Format dict for UNWIND statement
-                    filtered_nodes.append({'node_id': node['node_id'], 'properties': node['node_props']})
+            for label, rows in indexed_nodes.items():
 
-            with self.driver.session(database=self.database) as session:
-                session.run(query, rows=filtered_nodes)
+                query = f"""
+
+                    UNWIND $rows as row
+                        CREATE (a:{label} {'{'}{self.unique_prop_key}: row.node_id{'}'})
+                            SET a += row.properties
+
+                """
+
+                session.run(query, rows=rows)
 
     def _import_relationships_file(self, i, file_path):
 
@@ -169,43 +174,53 @@ class Importer:
         :return:
         """
 
-        relationships = from_json(file_path, compressed=self.compressed)
 
-        for relationship_type in tqdm(self.relationship_types,
-                                      desc=f"Importing Relationships in file ({i}/{len(self.relationships_files)})"):
-            for label_1 in self.labels:
-                for label_2 in self.labels:
+        # Create skeleton indexing
+        indexed_relationships = {}
 
-                    query = f"""
-                    
-                    UNWIND $rows as row
-                        MERGE (start_node:{label_1} {'{'}{self.unique_prop_key}: row.start_node_id{'}'})
-                            ON CREATE SET start_node += row.start_node_props
-                        MERGE (end_node:{label_2} {'{'}{self.unique_prop_key}: row.end_node_id{'}'})
-                            ON CREATE SET end_node += row.end_node_props
-                        CREATE (start_node)-[r:{relationship_type}]->(end_node)
-                            SET r += row.properties
-                        
-                    """
+        # Index relationships
+        for relationship in from_json(file_path, compressed=self.compressed):
 
-                    filter_relationships = []
-                    for relationship in relationships:
+            row = {'start_node_id': relationship['start_node_id'],
+                    'start_node_props': relationship['start_node_props'],
+                    'end_node_id': relationship['end_node_id'],
+                    'end_node_props': relationship['end_node_props'],
+                    'properties': relationship['rel_props'],
+                    'raw_rel': relationship}
 
-                        # Grab relationship where node labels match
-                        if relationship['start_node_labels'] == label_1 and relationship['end_node_labels'] == label_2:
+            rel_type = relationship['rel_type']
+            start_labels = relationship['start_node_labels']
+            end_labels = relationship['end_node_labels']
+            index_str = f"{rel_type}||{start_labels}||{end_labels}"
 
-                            # And where relationship type match the working parameters above in for loops
-                            if relationship_type == relationship['rel_type']:
+            if index_str in indexed_relationships.keys():
+                indexed_relationships[index_str].append(row)
+            else:
+                indexed_relationships[index_str] = [row]
 
-                                # Format dict for UNWIND
-                                filter_relationships.append({'start_node_id': relationship['start_node_id'],
-                                                             'start_node_props': relationship['start_node_props'],
-                                                             'end_node_id': relationship['end_node_id'],
-                                                             'end_node_props': relationship['end_node_props'],
-                                                             'properties': relationship['rel_props']})
+        with self.driver.session(database=self.database) as session:
 
-                    with self.driver.session(database=self.database) as session:
-                        session.run(query, rows=filter_relationships)
+            for index_str, rows in tqdm(indexed_relationships.items(),
+                                    desc=f"Importing Relationships in file ({i+1}/{len(self.relationships_files)})"):
+
+                index_str = index_str.split("||")
+                rel_type = index_str[0]
+                label_1 = index_str[1]
+                label_2 = index_str[2]
+
+                query = f"""
+
+                UNWIND $rows as row
+                    MERGE (start_node:{label_1} {'{'}{self.unique_prop_key}: row.start_node_id{'}'})
+                        ON CREATE SET start_node += row.start_node_props
+                    MERGE (end_node:{label_2} {'{'}{self.unique_prop_key}: row.end_node_id{'}'})
+                        ON CREATE SET end_node += row.end_node_props
+                    CREATE (start_node)-[r:{rel_type}]->(end_node)
+                        SET r += row.properties
+
+                """
+
+                session.run(query, rows=rows)
 
     def _cleanup(self):
 
@@ -221,15 +236,15 @@ class Importer:
             session.run(query)
 
             # Drop dummy constraints used to speed up merging nodes
-            for node_labels in self.labels:
+            for node_labels in tqdm(self.labels, desc='Removing Temporary Constraints'):
                 node_labels = node_labels.split(":")
                 for node_label in node_labels:
                     constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key} IF EXISTS"
                     session.run(constraint)
 
             # Add original constraints
-            # Note it actual slows code down to insert these constraints earlier than now
-            for constraint in self.constraints:
+            # Note it is slower to add these earlier
+            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints'):
                 constraint = constraint.split("CONSTRAINT")[1]
                 constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
                 session.run(constraint)
