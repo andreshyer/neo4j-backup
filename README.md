@@ -37,11 +37,7 @@ that your user has read privileges for downloading data, and write privileges fo
 
 # Installation
 
-This is coming eventually, but will likely look like
-
 `pip install neo4j-backup`
-
-For now, this repo can be downloaded and used from source
 
 # Usage
 
