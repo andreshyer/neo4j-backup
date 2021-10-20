@@ -30,21 +30,21 @@ This repo is not intended to replace the naive Neo4j backup dump files,
 but rather to be used in instances where a dump file is not an option.
 Such as moving data from Neo4j to a different type of database that is not Neo4j, 
 storing backups in different formats encase something happens to the original dump file backup,
-or having to safely downgrade a Neo4j graph.
+or having to downgrade a Neo4j graph.
 
-Also, this repo aims to be as simplistic as possible with two main purposes. 
+Also, this repo aims to be as simplistic as possible with two main purposes.
 To download a Neo4j graph without using a dump file and to be able to upload that data to a different Neo4j graph.
 Only simple cypher statements are used to import and extract data from Neo4j.
 The data is downloaded as json files.
 The json files are compressed with gzip protocol by default,
 but you can choose to export the data without compressing.
 
-When creating this tool, Enterprise tools were not used. 
-Meaning that APOC or any other Enterprise/Desktop exclusive tool is not needed, 
-and this can be used on the community edition of Neo4j. 
+When creating this tool, Enterprise tools were not used.
+Meaning that APOC or any other Enterprise/Desktop exclusive tool is not needed,
+and this can be used on the community edition of Neo4j.
 
-This repo differs from most other Neo4j backup repos in that the Neo4j graph does not need to be a specific instance. 
-This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
+This repo differs from most other Neo4j backup repos in that the Neo4j graph does not need to be a specific instance.
+This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc.
 The only requirements are that the python neo4j-driver needs to be able to connect to the database,
 that your user has read privileges for downloading data, and write privileges for importing data.
 
@@ -63,10 +63,10 @@ that your user has read privileges for downloading data, and write privileges fo
 # Usage
 
 The exact parameters that should be used to access the database depends on the version of the Neo4j graph that you
-are trying to access. The python neo4j-driver documentation can be found at 
+are trying to access. The python neo4j-driver documentation can be found at
 https://neo4j.com/docs/api/python-driver/current/api.html.
 
-There will be times when the script ask the user for input for (y/N) questions, 
+There will be times when the script ask the user for input for (y/N) questions,
 you can set `input_yes=True` to enter yes to all input questions.
 
 ## Extracting
@@ -118,7 +118,14 @@ if __name__ == "__main__":
 
 # Notes
 
-Please do note that when importing, an internal ID property is made when creating Nodes and properties. 
+This may not be the best tool too backup data if speed is a concern.
+This tool is significantly slower than the built-in dump tool neo4j provides.
+The selling point of this script is also its biggest downfall, all calls to Neo4j are done with cypher.
+This adds a significant amount of overhead that can be avoided if the direct files of a graph can be accessed.
+Also, while the raw data is machine-readable,
+it still needs to be manipulated by the end to insert it into other databases.
+
+Another note, an internal ID property is made when creating Nodes and properties.
 Since this script does not read the underlying file in the Neo4j database, 
 some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each NODE is not reasonable.
