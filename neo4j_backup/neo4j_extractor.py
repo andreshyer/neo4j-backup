@@ -33,23 +33,16 @@ class Extractor:
         self.input_yes: bool = input_yes
         self.compress: bool = compress
 
-        self.property_keys: set[str] = set()
-        self.labels: set[str] = set()
-        self.rel_types: set[str] = set()
-        self.constraints: list[str] = []
-        self.constraints_names: list[str] = []
+        self.property_keys: set = set()
+        self.labels: set = set()
+        self.rel_types: set = set()
+        self.constraints: list = []
+        self.constraints_names: list = []
         self.db_id: str = ""
 
-        self.json_file_size: int = 2617801
+        self.json_file_size: int = int("0xFFFF", 16)  # Default size of json objects in memory
 
     def extract_data(self):
-
-        """
-
-        :param max_ram: Max size of python objects in RAM, recommended 1-3 MB, as this effect UNWINDS in neo4j_importer
-        :param units: Units for max_ram, options: KB, MB
-        :return:
-        """
 
         self._test_connection()
         self._verify_db_not_empty()

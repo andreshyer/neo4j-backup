@@ -5,7 +5,7 @@ from os import getcwd, listdir
 from neo4j import GraphDatabase
 from neo4j.exceptions import ServiceUnavailable
 
-from ._backends import from_json, to_json
+from ._backends import from_json
 
 
 class Importer:
@@ -30,9 +30,9 @@ class Importer:
 
         self.compressed: bool = from_json(self.project_dir / "compressed.json")
         self.unique_prop_key: str = from_json(self.project_dir / f"unique_prop_key.json")
-        self.labels: list[str] = from_json(self.project_dir / 'labels.json')
-        self.relationship_types: list[str] = from_json(self.project_dir / 'types.json')
-        self.constraints: list[str] = from_json(self.project_dir / 'constraints.json')
+        self.labels: list = from_json(self.project_dir / 'labels.json')
+        self.relationship_types: list = from_json(self.project_dir / 'types.json')
+        self.constraints: list = from_json(self.project_dir / 'constraints.json')
 
         self.relationships_files = []
         for file_path in listdir(self.data_dir):
@@ -150,7 +150,6 @@ class Importer:
         with self.driver.session(database=self.database) as session:
 
             for label, rows in indexed_nodes.items():
-
                 query = f"""
 
                     UNWIND $rows as row
@@ -174,7 +173,6 @@ class Importer:
         :return:
         """
 
-
         # Create skeleton indexing
         indexed_relationships = {}
 
@@ -182,11 +180,11 @@ class Importer:
         for relationship in from_json(file_path, compressed=self.compressed):
 
             row = {'start_node_id': relationship['start_node_id'],
-                    'start_node_props': relationship['start_node_props'],
-                    'end_node_id': relationship['end_node_id'],
-                    'end_node_props': relationship['end_node_props'],
-                    'properties': relationship['rel_props'],
-                    'raw_rel': relationship}
+                   'start_node_props': relationship['start_node_props'],
+                   'end_node_id': relationship['end_node_id'],
+                   'end_node_props': relationship['end_node_props'],
+                   'properties': relationship['rel_props'],
+                   'raw_rel': relationship}
 
             rel_type = relationship['rel_type']
             start_labels = relationship['start_node_labels']
@@ -201,8 +199,8 @@ class Importer:
         with self.driver.session(database=self.database) as session:
 
             for index_str, rows in tqdm(indexed_relationships.items(),
-                                    desc=f"Importing Relationships in file ({i+1}/{len(self.relationships_files)})"):
-
+                                        desc=f"Importing Relationships in file "
+                                             f"({i + 1}/{len(self.relationships_files)})"):
                 index_str = index_str.split("||")
                 rel_type = index_str[0]
                 label_1 = index_str[1]
