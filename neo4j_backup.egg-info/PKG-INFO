@@ -7,7 +7,7 @@ Author: Andres Hyer
 Author-email: andreshyer@gmail.com
 License: Apache Software License
 Platform: UNKNOWN
-Classifier: Development Status :: 4 - Beta
+Classifier: Development Status :: 3 - Alpha
 Classifier: License :: OSI Approved :: Apache Software License
 Classifier: Operating System :: POSIX :: Linux
 Classifier: Programming Language :: Python :: 3.5
