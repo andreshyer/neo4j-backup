@@ -14,5 +14,5 @@ if __name__ == "__main__":
 
     project_dir = "data_dump"
     input_yes = False
-    importer = Importer(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes)
+    importer = Importer(project_dir=project_dir, driver=driver, database=database, input_yes=input_yes)
     importer.import_data()

@@ -15,5 +15,5 @@ if __name__ == "__main__":
     project_dir = "data_dump"
     input_yes = False
     compress = True
-    extractor = Extractor(project_dir="data_dump", driver=driver, database=database, input_yes=input_yes, compress=compress)
+    extractor = Extractor(project_dir=project_dir, driver=driver, database=database, input_yes=input_yes, compress=compress)
     extractor.extract_data()
