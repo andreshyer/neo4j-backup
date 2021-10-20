@@ -9,7 +9,7 @@ This repo is not intended to replace the naive Neo4j backup dump files,
 but rather to be used in instances where a dump file is not an option.
 Such as moving data from Neo4j to a different type of database that is not Neo4j, 
 storing backups in different formats encase something happens to the original dump file backup,
-or having to safely downgrade a Neo4j graph.
+or having to downgrade a Neo4j graph.
 
 Also, this repo aims to be as simplistic as possible with two main purposes. 
 To download a Neo4j graph without using a dump file and to be able to upload that data to a different Neo4j graph.
@@ -97,7 +97,14 @@ if __name__ == "__main__":
 
 # Notes
 
-Please do note that when importing, an internal ID property is made when creating Nodes and properties. 
+This may not be the best tool too backup data if speed is a concern.
+This tool is significantly slower than the built-in dump tool neo4j provides.
+The selling point of this script is also its biggest downfall, all calls to Neo4j are done with cypher.
+This adds a significant amount of overhead that can be avoided if the direct files of a graph can be accessed.
+Also, while the raw data is machine-readable, 
+it still needs to be manipulated by the end to insert it into other databases.
+
+Another note, an internal ID property is made when creating Nodes and properties. 
 Since this script does not read the underlying file in the Neo4j database, 
 some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each NODE is not reasonable.
