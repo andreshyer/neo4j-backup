@@ -63,7 +63,7 @@ class Importer:
             self._import_lonely_nodes_file(file_path)
 
         # Grab all the relationship types used by relationships
-        for i, file_path in enumerate(self.relationships_files):
+        for i, file_path in enumerate(tqdm(self.relationships_files, desc="Importing Relationships")):
             self._import_relationships_file(i, file_path)
 
         # Remove dummy constraints and properties
@@ -198,9 +198,7 @@ class Importer:
 
         with self.driver.session(database=self.database) as session:
 
-            for index_str, rows in tqdm(indexed_relationships.items(),
-                                        desc=f"Importing Relationships in file "
-                                             f"({i + 1}/{len(self.relationships_files)})"):
+            for index_str, rows in indexed_relationships.items():
                 index_str = index_str.split("||")
                 rel_type = index_str[0]
                 label_1 = index_str[1]
