@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name='neo4j-backup',
-    version='0.1.0',
+    version='0.2.0',
     url='https://github.com/andreshyer/neo4j-backup',
     author='Andres Hyer',
     author_email='andreshyer@gmail.com',
