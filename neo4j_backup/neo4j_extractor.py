@@ -66,7 +66,7 @@ class Extractor:
         mkdir(self.data_dir)
 
         self._pull_constraints()  # get constraints of database
-        self._pull_lonely_nodes()  # get nodes in database
+        self._pull_nodes()  # get nodes in database
         self._pull_relationships()  # get relationship in database
 
         # calculate a unique prop key to act a dummy id prop for importing
@@ -78,8 +78,8 @@ class Extractor:
         to_json(file_path=self.project_dir / f"constraints.json", data=self.constraints)
         to_json(file_path=self.project_dir / f"constraints_names.json", data=self.constraints_names)
         to_json(file_path=self.project_dir / "property_keys.json", data=list(self.property_keys))
-        to_json(file_path=self.project_dir / "labels.json", data=list(self.labels))
-        to_json(file_path=self.project_dir / "types.json", data=list(self.rel_types))
+        to_json(file_path=self.project_dir / "node_labels.json", data=list(self.labels))
+        to_json(file_path=self.project_dir / "rel_types.json", data=list(self.rel_types))
         to_json(file_path=self.project_dir / "compressed.json", data=self.compress)
 
     def _test_connection(self):
@@ -120,12 +120,11 @@ class Extractor:
         node_props = dict(node)
         return node_id, node_labels, node_props
 
-    def _pull_lonely_nodes(self):
+    def _pull_nodes(self):
 
         query = """
         
         MATCH (node)
-        WHERE NOT (node)-[]-()
         RETURN node
         
         """
@@ -133,7 +132,7 @@ class Extractor:
         extracted_data = []
 
         with self.driver.session(database=self.database) as session:
-            number_of_nodes = session.run("MATCH (node) WHERE NOT (node)-[]-() RETURN COUNT(node)").value()[0]
+            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
 
             results = session.run(query)
             for index, record in enumerate(tqdm(results, total=number_of_nodes, desc="Extracting Nodes")):
@@ -150,12 +149,12 @@ class Extractor:
                 if index % 1000 == 0 and index != 0:
                     size_in_ram = getsizeof(extracted_data)
                     if size_in_ram > self.json_file_size:
-                        to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data, compress=self.compress)
+                        to_json(self.data_dir / f"nodes_{index}.json", extracted_data, compress=self.compress)
                         extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"lonely_nodes_{index}.json", extracted_data, compress=self.compress)
+                to_json(self.data_dir / f"nodes_{index}.json", extracted_data, compress=self.compress)
 
     def _pull_relationships(self):
 
@@ -194,10 +193,9 @@ class Extractor:
                 self.rel_types.add(rel_type)
 
                 row = {'start_node_id': start_node_id, 'start_node_labels': start_node_labels,
-                       'start_node_props': start_node_props,
                        'end_node_id': end_node_id, 'end_node_labels': end_node_labels,
-                       'end_node_props': end_node_props,
-                       'rel_type': rel_type, 'rel_props': rel_props}
+                       'rel_type': rel_type,
+                       'rel_props': rel_props}
                 extracted_data.append(row)
 
                 if index % 1000 == 0 and index != 0:
