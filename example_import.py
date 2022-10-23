@@ -11,7 +11,7 @@ if __name__ == "__main__":
     trust = "TRUST_ALL_CERTIFICATES"
     driver = GraphDatabase.driver(uri, auth=(username, password), encrypted=encrypted, trust=trust)
 
-    database = "neo4j"
+    database = "dev"
 
     project_dir = "data_dump"
     input_yes = False

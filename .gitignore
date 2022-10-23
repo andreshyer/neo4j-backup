@@ -1,1 +1,3 @@
 /data_dump/
+/dist/
+/neo4j_backup.egg-info/
