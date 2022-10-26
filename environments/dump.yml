@@ -1,9 +1,0 @@
-name: dump
-channels:
-  - defaults
-dependencies:
-  - python >= 3.5
-  - pip
-  - pip:
-      - neo4j >= 4.3.0
-      - tqdm >= 4.10.0

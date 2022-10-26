@@ -13,7 +13,7 @@ authors = [{ name = "Andres Hyer", email = "andreshyer@gmail.com" }]
 license = { file = "Apache Software License" }
 classifiers = [
     "Development Status :: 4 - Beta",
-    "License :: OSI Approved :: Apache Software Licens",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3",
 ]
 keywords = ["neo4j"]
