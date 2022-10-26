@@ -1,0 +1,30 @@
+# pyproject.toml
+
+[build-system]
+requires = ["setuptools>=61.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "neo4j-backup"
+version = "0.2.0"
+description = "A simple way to backup and restore Neo4j databases without using dump files."
+readme = "README.md"
+authors = [{ name = "Andres Hyer", email = "andreshyer@gmail.com" }]
+license = { file = "Apache Software License" }
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: Apache Software Licens",
+    "Programming Language :: Python :: 3",
+]
+keywords = ["neo4j"]
+dependencies = [
+    "neo4j>=4.3.0",
+    "tqdm>=4.10.0",
+]
+requires-python = ">=3.5"
+
+[project.urls]
+Homepage = "https://github.com/andreshyer/neo4j-backup"
+
+[tool.setuptools.packages.find]
+where = ["neo4j_backup"]

@@ -106,11 +106,6 @@ class Importer:
                              f"(m:{node_label}) ASSERT (m.{self.unique_prop_key}) IS UNIQUE"
                 session.run(constraint)
 
-            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
-                constraint = constraint.split("CONSTRAINT")[1]
-                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
-                session.run(constraint)
-
     @staticmethod
     def _reformat_props(props, prop_types):
 
@@ -272,3 +267,9 @@ class Importer:
                 for node_label in node_labels:
                     constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key} IF EXISTS"
                     session.run(constraint)
+
+            # Apply real constraints
+            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
+                constraint = constraint.split("CONSTRAINT")[1]
+                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
+                session.run(constraint)
