@@ -27,4 +27,4 @@ requires-python = ">=3.5"
 Homepage = "https://github.com/andreshyer/neo4j-backup"
 
 [tool.setuptools.packages.find]
-where = ["neo4j_backup"]
+where = ["src/neo4j_backup"]
