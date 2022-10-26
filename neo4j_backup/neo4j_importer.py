@@ -16,10 +16,9 @@ class Importer:
         This purpose of this class is to import the information in the project_dir output from the Extractor class.
 
 
-        :param project_dir: The directory where to backup Neo4j Graph
+        :param project_dir: The directory where to back up Neo4j Graph
         :param driver: Neo4j driver
-        :param input_yes: bool, determines weather to just type in "y" for all input options. Be careful when running
-            this option
+        :param input_yes: bool, determines weather to just type in "y" for all input options
         """
 
         self.project_dir = Path(getcwd()) / project_dir
@@ -49,7 +48,7 @@ class Importer:
     def import_data(self):
 
         """
-        This is the main function in this class, this actual imports the data import Neo4j.
+        This is the main function in this class, this actually imports the data into Neo4j.
 
         :return:
         """
@@ -59,11 +58,11 @@ class Importer:
         self._apply_constraints()  # Apply the dummy constraints
 
         # Grab all the labels used for Nodes
-        for file_path in tqdm(self.nodes_files, desc="Importing Nodes"):
+        for file_path in self.nodes_files:
             self._import_nodes_file(file_path)
 
         # Grab all the relationship types used by relationships
-        for file_path in tqdm(self.relationships_files, desc="Importing Relationships"):
+        for file_path in self.relationships_files:
             self._import_relationships_file(file_path)
 
         # Remove dummy constraints and properties
@@ -102,113 +101,154 @@ class Importer:
         with self.driver.session(database=self.database) as session:
 
             # Create dummy constraints on each node label, helps speed up inserting significantly
-            for node_labels in tqdm(self.labels, desc='Applying Temporary Constraints'):
-                node_labels = node_labels.split(":")
-                for node_label in node_labels:
-                    constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} IF NOT EXISTS ON " \
-                                 f"(m:{node_label}) ASSERT (m.{self.unique_prop_key}) IS UNIQUE"
-                    session.run(constraint)
-
-            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
-                constraint = constraint.split("CONSTRAINT")[1]
-                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
+            for node_label in tqdm(self.labels, desc='Applying Temporary Constraints'):
+                constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} IF NOT EXISTS ON " \
+                             f"(m:{node_label}) ASSERT (m.{self.unique_prop_key}) IS UNIQUE"
                 session.run(constraint)
+
+    @staticmethod
+    def _reformat_props(props, prop_types):
+
+        # Re-format property in a way that Neo4j understands
+        def _reformat_prop(prop_type, prop):
+            if prop_type == "int" or prop_type == "bool" or prop_type == "float":
+                reformatted_prop = prop
+            elif prop_type == "str":
+                reformatted_prop = prop.replace('"', '\\"')
+                reformatted_prop = reformatted_prop.replace("'", "\\'")
+                reformatted_prop = f'"{reformatted_prop}"'
+            elif prop_type == "2d-cartesian-point":
+                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'cartesian'{'}'})"
+            elif prop_type == "3d-cartesian-point":
+                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'cartesian-3d'{'}'})"
+            elif prop_type == "2d-WGS-84-point":
+                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'wgs-84'{'}'})"
+            elif prop_type == "3d-WGS-84-point":
+                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'wgs-84-3d'{'}'})"
+            elif prop_type == "date":
+                reformatted_prop = f'date("{prop}")'
+            elif prop_type == "time":
+                reformatted_prop = f'time("{prop}")'
+            elif prop_type == "datetime":
+                reformatted_prop = f'datetime("{prop}")'
+            elif prop_type == "duration":
+                duration_str = ""
+                for time_key, time_value in prop.items():
+                    duration_str += f"{time_key}: {time_value},"
+                duration_str = duration_str.split(",")[:-1]
+                duration_str = ", ".join(duration_str)
+                duration_str = "{" + duration_str + "}"
+                reformatted_prop = f'duration({duration_str})'
+            else:
+                raise ValueError(f"Property type {prop_type} is not supported")
+            return reformatted_prop
+
+        # Goal is to have a final dict of {prop_key: prop_value_as_str}
+        # Where prop_value_as_str is the original prop_value formatted in a way Neo4j understands
+        new_props = {}
+        for prop_key, prop_type in prop_types.items():
+            prop = props[prop_key]
+
+            # Treat property that are list like normal if they are points
+            point_types = ["2d-cartesian-point", "3d-cartesian-point", "2d-WGS-84-point", "3d-WGS-84-point"]
+            if prop_type in point_types:
+                new_props[prop_key] = _reformat_prop(prop_type, prop)
+
+            # Treat each property inside an array separately
+            elif isinstance(prop, list):
+                array_props = []
+                for i, sub_prop in enumerate(prop):
+                    sub_prop_type = prop_type[i]
+                    array_props.append(_reformat_prop(sub_prop_type, sub_prop))
+                array_str = ""
+                for array_prop in array_props:
+                    array_str += f"{array_prop}, "
+                array_str = array_str.split(",")[:-1]
+                array_str = ", ".join(array_str)
+                array_str = "[" + array_str + "]"
+                new_props[prop_key] = array_str
+
+            # Treat all other properties as normal
+            else:
+                new_props[prop_key] = _reformat_prop(prop_type, prop)
+
+        return new_props
 
     def _import_nodes_file(self, file_path):
 
         """
-        This function might be a bit difficult to understand. One of the fastest way to insert data into Neo4j without
-        APOC is with UNWIND statements. Most information can be passed into the cypher through parameters, but
-        parameters passed cannot specify a Node Label. There is no way to dynamically allocate node labels in the
-        query. So each combination of labels is looped through, and all the nodes in the current working node
-        file that have the same label as the current working label are gathered. Then the list of nodes are UNWIND in
-        the query.
-
-        Something to note is that is easier and faster to treat nodes with multiple labels as a separate label. Rather
-        than taking a node like
-
-        `CREATE (p:Person:Banker {name: "richy"})`
-
-        and trying to merge two separate nodes, one for the Person label and one for the Banker label. Then trying to
-        drop the duplicate node and adding the label later. It is easier to look at Person:Banker as separate labels,
-        making sure the combination of labels are sorted in alphabetical order to reduce redundancy.
+        Import nodes from node files
 
         :param file_path: Path object pointing to location of file with node information
         :return:
         """
 
-        # Create skeleton indexing scheme
-        indexed_nodes = {}
-
-        # Index nodes
-        for node in from_json(file_path, compressed=self.compressed):
-
-            properties = node['node_props']
-            properties[self.unique_prop_key] = node['node_id']
-
-            node_labels = node['node_labels']
-
-            if node_labels in indexed_nodes.keys():
-                indexed_nodes[node['node_labels']].append(properties)
-            else:
-                indexed_nodes[node_labels] = [properties]
-
         with self.driver.session(database=self.database) as session:
 
-            for label, rows in indexed_nodes.items():
+            # For each node in the given file
+            for node in tqdm(from_json(file_path, compressed=self.compressed),
+                             desc=f"Inserting nodes from {file_path.stem}"):
+
+                node_id = node["node_id"]
+                node_labels = node["node_labels"]
+                node_labels = ":".join(node_labels)
+
+                # Gather properties
+                node_props = node["node_props"]
+                node_prop_types = node["node_props_types"]
+                node_props = self._reformat_props(node_props, node_prop_types)
+
+                # Run query, inserting one node at a time
                 query = f"""
-
-                    UNWIND $rows as row
-                        CREATE (a:{label})
-                        SET a += row
-
+                    CREATE (a:{node_labels})
+                    SET a.{self.unique_prop_key} = {node_id}\n
                 """
 
-                session.run(query, rows=rows)
+                # Add all properties associated with a node
+                for prop_key, prop_value in node_props.items():
+                    query += f"SET a.{prop_key} = {prop_value}\n"
+
+                session.run(query, parameters={"node_props": node_props})
 
     def _import_relationships_file(self, file_path):
 
         """
-        This function runs into a lot of the same problems as the self._import_nodes_file(), in that
-        node labels can not be dynamically allocated in a Neo4j query. But, relationship types can not be
-        passed either. So, three nested for loops are needed to go through the combination of labels and relationship
-        types.
+        Import relationships from relationship files
 
         :param file_path:
         :return:
         """
 
-        # Create skeleton indexing
-        indexed_relationships = []
-        labels = set()
-        rel_types = set()
-
-        # Index relationships
-        for relationship in from_json(file_path, compressed=self.compressed):
-            row = relationship
-            labels.add(row['start_node_labels'])
-            labels.add(row['end_node_labels'])
-            rel_types.add(row['rel_type'])
-            indexed_relationships.append(row)
-
         with self.driver.session(database=self.database) as session:
 
-            for start_label in labels:
-                for end_label in labels:
-                    for rel_type in rel_types:
+            for relationship in tqdm(from_json(file_path, compressed=self.compressed),
+                                     desc=f"Inserting relationships from {file_path.stem}"):
 
-                        query = f"""
-            
-                        UNWIND $rows as row
-                            MATCH (start_node:{start_label})
-                                WHERE start_node.{self.unique_prop_key} = row.start_node_id
-                            MATCH (end_node:{end_label})
-                                WHERE end_node.{self.unique_prop_key} = row.end_node_id
-                            CREATE (start_node)-[r:{rel_type}]->(end_node)
-                                SET r += row.rel_props
-                            """
+                start_node_id = relationship["start_node_id"]
+                start_node_labels = relationship["start_node_labels"]
+                start_node_labels = ":".join(start_node_labels)
 
-                        session.run(query, rows=indexed_relationships)
+                end_node_id = relationship["end_node_id"]
+                end_node_labels = relationship["end_node_labels"]
+                end_node_labels = ":".join(end_node_labels)
+
+                rel_type = relationship["rel_type"]
+                rel_props = relationship["rel_props"]
+                rel_props_types = relationship["rel_props_types"]
+                rel_props = self._reformat_props(rel_props, rel_props_types)
+
+                query = f"""
+                    MATCH (start_node:{start_node_labels})
+                        WHERE start_node.{self.unique_prop_key} = {start_node_id}
+                    MATCH (end_node:{end_node_labels})
+                        WHERE end_node.{self.unique_prop_key} = {end_node_id}
+                    CREATE (start_node)-[r:{rel_type}]->(end_node)\n
+                    """
+
+                for prop_key, prop_value in rel_props.items():
+                    query += f"SET r.{prop_key} = {prop_value}\n"
+
+                session.run(query, parameters={"rel_props": rel_props})
 
     def _cleanup(self):
 
@@ -216,10 +256,8 @@ class Importer:
 
             # Drop dummy unique property key used for merging nodes
             query = f"""
-
-            MATCH (a) WHERE EXISTS(a.{self.unique_prop_key})
-            REMOVE a.{self.unique_prop_key}
-
+                MATCH (a) WHERE EXISTS(a.{self.unique_prop_key})
+                REMOVE a.{self.unique_prop_key}
             """
             session.run(query)
 
@@ -230,5 +268,8 @@ class Importer:
                     constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key} IF EXISTS"
                     session.run(constraint)
 
-            # Add original constraints
-            # Note it is slower to add these earlier
+            # Apply real constraints
+            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
+                constraint = constraint.split("CONSTRAINT")[1]
+                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
+                session.run(constraint)

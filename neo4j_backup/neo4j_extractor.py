@@ -6,6 +6,8 @@ from os import mkdir, getcwd
 
 from tqdm import tqdm
 from neo4j import GraphDatabase
+from neo4j.spatial import Point
+from neo4j.time import DateTime, Date, Time, Duration
 from neo4j.exceptions import ServiceUnavailable
 
 from ._backends import to_json, get_unique_prop_key
@@ -14,16 +16,16 @@ from ._backends import to_json, get_unique_prop_key
 class Extractor:
 
     def __init__(self, project_dir, driver: GraphDatabase.driver, database: str = "neo4j", input_yes: bool = False,
-                 compress: bool = True):
+                 compress: bool = True, json_file_size: int = int("0xFFFF", 16)):
 
         """
         The purpose of this class is to extract all the information from a neo4j graph
 
-        :param project_dir: The directory where to backup Neo4j Graph
+        :param project_dir: The directory where to back up Neo4j Graph
         :param driver: Neo4j driver
-        :param input_yes: bool, determines weather to just type in "y" for all input options. Be careful when running
-            this option
+        :param input_yes: bool, determines weather to just type in "y" for all input options
         :param compress: bool, weather or not to compress files as they are being extracted
+        :param json_file_size: int, max size of json object in memory before dumping
         """
 
         self.project_dir: Path = Path(getcwd()) / project_dir
@@ -40,7 +42,7 @@ class Extractor:
         self.constraints_names: list = []
         self.db_id: str = ""
 
-        self.json_file_size: int = int("0xFFFF", 16)  # Default size of json objects in memory
+        self.json_file_size: int = json_file_size  # Default size of json objects in memory
 
     def extract_data(self):
 
@@ -114,11 +116,73 @@ class Extractor:
                 self.constraints_names.append(dict(result)['name'])
 
     @staticmethod
-    def __parse_node__(node):
+    def __parse_props_types(props):
+
+        def __parse_prop(prop):
+
+            if isinstance(prop, bool):
+                data_type = "bool"
+            elif isinstance(prop, float):
+                data_type = "float"
+            elif isinstance(prop, int):
+                data_type = "int"
+            elif isinstance(prop, str):
+                data_type = "str"
+            elif isinstance(prop, Point):
+                point_srid = prop.srid
+                if point_srid == 7203:
+                    data_type = "2d-cartesian-point"
+                elif point_srid == 9157:
+                    data_type = "3d-cartesian-point"
+                elif point_srid == 4326:
+                    data_type = "2d-WGS-84-point"
+                elif point_srid == 4979:
+                    data_type = "3d-WGS-84-point"
+                else:
+                    raise ValueError(f"Point of srid {point_srid} is not supported")
+                prop = list(prop)
+            elif isinstance(prop, Date):
+                data_type = "date"
+            elif isinstance(prop, Time):
+                data_type = "time"
+            elif isinstance(prop, DateTime):
+                data_type = "datetime"
+            elif isinstance(prop, Duration):
+                data_type = "duration"
+                time_list = ["months", "days", "seconds", "nanoseconds"]
+                prop = dict(zip(time_list, props[prop_key]))
+            else:
+                raise ValueError(f"Encoder is not setup for {type(prop)} type from {prop} on "
+                                 f"prop key {prop_key}")
+            return data_type, prop
+
+        node_props_types = {}
+        for prop_key, prop_value in props.items():
+
+            if isinstance(prop_value, list):
+                prop_values = []
+                prop_types = []
+                for sub_prop_value in prop_value:
+                    prop_type, prop_value = __parse_prop(sub_prop_value)
+                    prop_types.append(prop_type)
+                    prop_values.append(prop_value)
+                props[prop_key] = prop_values
+                node_props_types[prop_key] = prop_types
+
+            else:
+                prop_type, prop_value = __parse_prop(prop_value)
+                props[prop_key] = prop_value
+                node_props_types[prop_key] = prop_type
+
+        return props, node_props_types
+
+    def __parse_node__(self, node):
         node_id = node.id
-        node_labels = ":".join(list(node.labels))
+        node_labels = list(node.labels)
         node_props = dict(node)
-        return node_id, node_labels, node_props
+        node_props, node_props_types = self.__parse_props_types(node_props)
+
+        return node_id, node_labels, node_props, node_props_types
 
     def _pull_nodes(self):
 
@@ -133,28 +197,30 @@ class Extractor:
 
         with self.driver.session(database=self.database) as session:
             number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
-
             results = session.run(query)
-            for index, record in enumerate(tqdm(results, total=number_of_nodes, desc="Extracting Nodes")):
+
+            counter = 0
+            for record in tqdm(results, total=number_of_nodes, desc="Extracting Nodes"):
+                counter += 1
 
                 # Base node object
                 node = record['node']
-                node_id, node_labels, node_props = self.__parse_node__(node)
+                node_id, node_labels, node_props, node_props_types = self.__parse_node__(node)
                 self.property_keys.update(node_props.keys())
-                self.labels.add(node_labels)
+                self.labels.update(node_labels)
 
-                row = {'node_id': node_id, 'node_labels': node_labels, 'node_props': node_props}
+                row = {'node_id': node_id, 'node_labels': node_labels,
+                       'node_props': node_props, 'node_props_types': node_props_types}
                 extracted_data.append(row)
 
-                if index % 1000 == 0 and index != 0:
-                    size_in_ram = getsizeof(extracted_data)
-                    if size_in_ram > self.json_file_size:
-                        to_json(self.data_dir / f"nodes_{index}.json", extracted_data, compress=self.compress)
-                        extracted_data = []
+                size_in_ram = getsizeof(extracted_data)
+                if size_in_ram > self.json_file_size:
+                    to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress)
+                    extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"nodes_{index}.json", extracted_data, compress=self.compress)
+                to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress)
 
     def _pull_relationships(self):
 
@@ -171,42 +237,44 @@ class Extractor:
             number_of_relationships = session.run("MATCH p=(start_node)-[rel]->(end_node) RETURN COUNT(p)").value()[0]
             results = session.run(query)
 
-            for index, record in enumerate(tqdm(results, total=number_of_relationships,
-                                                desc="Extracting Relationships")):
+            counter = 0
+            for record in tqdm(results, total=number_of_relationships,
+                               desc="Extracting Relationships"):
+                counter += 1
 
                 # Gather starting_node
                 start_node = record['start_node']
-                start_node_id, start_node_labels, start_node_props = self.__parse_node__(start_node)
+                start_node_id, start_node_labels, start_node_props, start_node_props_types = self.__parse_node__(start_node)
                 self.property_keys.update(start_node_props.keys())
-                self.labels.add(start_node_labels)
+                self.labels.update(start_node_labels)
 
                 # Gather ending_node
                 end_node = record['end_node']
-                end_node_id, end_node_labels, end_node_props = self.__parse_node__(end_node)
+                end_node_id, end_node_labels, end_node_props, end_node_props_types = self.__parse_node__(end_node)
                 self.property_keys.update(end_node_props.keys())
-                self.labels.add(end_node_labels)
+                self.labels.update(end_node_labels)
 
                 # Gather relationship
                 rel = record['rel']
-                rel_type, rel_props = rel.type, dict(rel)
+                rel_type = rel.type
+                rel_props = dict(rel)
+                rel_props, rel_props_types = self.__parse_props_types(rel_props)
                 self.property_keys.update(rel_props.keys())
                 self.rel_types.add(rel_type)
 
                 row = {'start_node_id': start_node_id, 'start_node_labels': start_node_labels,
                        'end_node_id': end_node_id, 'end_node_labels': end_node_labels,
-                       'rel_type': rel_type,
-                       'rel_props': rel_props}
+                       'rel_type': rel_type, 'rel_props': rel_props, 'rel_props_types': rel_props_types}
                 extracted_data.append(row)
 
-                if index % 1000 == 0 and index != 0:
-                    size_in_ram = getsizeof(extracted_data)
-                    if size_in_ram > self.json_file_size:
-                        to_json(self.data_dir / f"relationships_{index}.json", extracted_data, compress=self.compress)
-                        extracted_data = []
+                size_in_ram = getsizeof(extracted_data)
+                if size_in_ram > self.json_file_size:
+                    to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress)
+                    extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"relationships_{index}.json", extracted_data, compress=self.compress)
+                to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress)
 
     def _calc_unique_prop_key(self):
         keys_to_avoid = self.property_keys.copy()

@@ -5,7 +5,7 @@ from gzip import open as gzip_open
 
 
 def to_json(file_path, data, compress=False):
-    json_string = dumps(data, default=str)
+    json_string = dumps(data, default=str, indent=4)
 
     if compress:
         with gzip_open(f"{file_path}.gz", 'wb') as f:
