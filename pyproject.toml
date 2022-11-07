@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neo4j_backup"
-version = "0.2.2"
+version = "0.2.3"
 description = "A simple way to backup and restore Neo4j databases without using dump files."
 readme = "README.md"
 authors = [{ name = "Andres Hyer", email = "andreshyer@gmail.com" }]
