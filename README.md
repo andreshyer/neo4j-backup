@@ -157,7 +157,6 @@ This example shows saved data from a Node with complex data types.
         },
         "node_props_types": {
             "bool_example": "bool",
-            "bad": "str",
             "born": "int",
             "int_example": "int",
             "datatime_example": "datetime",
@@ -229,7 +228,6 @@ An example relationship is stored as:
         },
         "rel_props_types": {
             "bool_example": "bool",
-            "bad": "str",
             "int_example": "int",
             "datatime_example": "datetime",
             "point_3d_example": "3d-cartesian-point",
