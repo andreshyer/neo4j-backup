@@ -107,59 +107,69 @@ class Importer:
                 session.run(constraint)
 
     @staticmethod
-    def _reformat_props(props, prop_types):
+    def _reformat_props(props):
 
         # Re-format property in a way that Neo4j understands
-        def _reformat_prop(prop_type, prop):
-            if prop_type == "int" or prop_type == "bool" or prop_type == "float":
-                reformatted_prop = prop
-            elif prop_type == "str":
-                reformatted_prop = prop.replace('"', '\\"')
+        def _reformat_prop(p):
+
+            if isinstance(p, str):
+                reformatted_prop = p.replace('"', '\\"')
                 reformatted_prop = reformatted_prop.replace("'", "\\'")
                 reformatted_prop = f'"{reformatted_prop}"'
-            elif prop_type == "2d-cartesian-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'cartesian'{'}'})"
-            elif prop_type == "3d-cartesian-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'cartesian-3d'{'}'})"
-            elif prop_type == "2d-WGS-84-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'wgs-84'{'}'})"
-            elif prop_type == "3d-WGS-84-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'wgs-84-3d'{'}'})"
-            elif prop_type == "date":
-                reformatted_prop = f'date("{prop}")'
-            elif prop_type == "time":
-                reformatted_prop = f'time("{prop}")'
-            elif prop_type == "datetime":
-                reformatted_prop = f'datetime("{prop}")'
-            elif prop_type == "duration":
-                duration_str = ""
-                for time_key, time_value in prop.items():
-                    duration_str += f"{time_key}: {time_value},"
-                duration_str = duration_str.split(",")[:-1]
-                duration_str = ", ".join(duration_str)
-                duration_str = "{" + duration_str + "}"
-                reformatted_prop = f'duration({duration_str})'
+
+            elif isinstance(p, list):
+
+                prop_type, p = p[0], p[1]
+
+                if prop_type == "2d-cartesian-point":
+                    reformatted_prop = f"point({'{'}x: {p[0]}, y: {p[1]}, crs: 'cartesian'{'}'})"
+
+                elif prop_type == "3d-cartesian-point":
+                    reformatted_prop = f"point({'{'}x: {p[0]}, y: {p[1]}, z: {p[2]}, crs: 'cartesian-3d'{'}'})"
+
+                elif prop_type == "2d-WGS-84-point":
+                    reformatted_prop = f"point({'{'}x: {p[0]}, y: {p[1]}, crs: 'wgs-84'{'}'})"
+
+                elif prop_type == "3d-WGS-84-point":
+                    reformatted_prop = f"point({'{'}x: {p[0]}, y: {p[1]}, z: {p[2]}, crs: 'wgs-84-3d'{'}'})"
+
+                elif prop_type == "date":
+                    reformatted_prop = f'date("{p}")'
+
+                elif prop_type == "time":
+                    reformatted_prop = f'time("{p}")'
+
+                elif prop_type == "datetime":
+                    reformatted_prop = f'datetime("{p}")'
+
+                elif prop_type == "duration":
+                    duration_str = ""
+                    for time_key, time_value in p.items():
+                        duration_str += f"{time_key}: {time_value},"
+                    duration_str = duration_str.split(",")[:-1]
+                    duration_str = ", ".join(duration_str)
+                    duration_str = "{" + duration_str + "}"
+                    reformatted_prop = f'duration({duration_str})'
+
+                else:
+                    raise ValueError(f"Property {p} not understood")
+
             else:
-                raise ValueError(f"Property type {prop_type} is not supported")
+                reformatted_prop = p
+
             return reformatted_prop
 
         # Goal is to have a final dict of {prop_key: prop_value_as_str}
         # Where prop_value_as_str is the original prop_value formatted in a way Neo4j understands
         new_props = {}
-        for prop_key, prop_type in prop_types.items():
-            prop = props[prop_key]
-
-            # Treat property that are list like normal if they are points
-            point_types = ["2d-cartesian-point", "3d-cartesian-point", "2d-WGS-84-point", "3d-WGS-84-point"]
-            if prop_type in point_types:
-                new_props[prop_key] = _reformat_prop(prop_type, prop)
+        for prop_key, prop in props.items():
 
             # Treat each property inside an array separately
-            elif isinstance(prop, list):
+            if isinstance(prop, list) and prop[0] == "array":
+
                 array_props = []
-                for i, sub_prop in enumerate(prop):
-                    sub_prop_type = prop_type[i]
-                    array_props.append(_reformat_prop(sub_prop_type, sub_prop))
+                for i, sub_prop in enumerate(prop[1]):
+                    array_props.append(_reformat_prop(sub_prop))
                 array_str = ""
                 for array_prop in array_props:
                     array_str += f"{array_prop}, "
@@ -170,7 +180,7 @@ class Importer:
 
             # Treat all other properties as normal
             else:
-                new_props[prop_key] = _reformat_prop(prop_type, prop)
+                new_props[prop_key] = _reformat_prop(prop)
 
         return new_props
 
@@ -195,8 +205,7 @@ class Importer:
 
                 # Gather properties
                 node_props = node["node_props"]
-                node_prop_types = node["node_props_types"]
-                node_props = self._reformat_props(node_props, node_prop_types)
+                node_props = self._reformat_props(node_props)
 
                 # Run query, inserting one node at a time
                 query = f"""
@@ -234,8 +243,7 @@ class Importer:
 
                 rel_type = relationship["rel_type"]
                 rel_props = relationship["rel_props"]
-                rel_props_types = relationship["rel_props_types"]
-                rel_props = self._reformat_props(rel_props, rel_props_types)
+                rel_props = self._reformat_props(rel_props)
 
                 query = f"""
                     MATCH (start_node:{start_node_labels})
