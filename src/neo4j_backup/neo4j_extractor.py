@@ -16,7 +16,8 @@ from ._backends import to_json, get_unique_prop_key
 class Extractor:
 
     def __init__(self, project_dir, driver: GraphDatabase.driver, database: str = "neo4j", input_yes: bool = False,
-                 compress: bool = True, json_file_size: int = int("0xFFFF", 16)):
+                 compress: bool = True, indent_size: int = 0, encoder: str = "str",
+                 json_file_size: int = int("0xFFFF", 16)):
 
         """
         The purpose of this class is to extract all the information from a neo4j graph
@@ -34,6 +35,8 @@ class Extractor:
         self.database: str = database
         self.input_yes: bool = input_yes
         self.compress: bool = compress
+        self.indent_size: int = indent_size
+        self.encoder: str = encoder
 
         self.property_keys: set = set()
         self.labels: set = set()
@@ -83,6 +86,7 @@ class Extractor:
         to_json(file_path=self.project_dir / "node_labels.json", data=list(self.labels))
         to_json(file_path=self.project_dir / "rel_types.json", data=list(self.rel_types))
         to_json(file_path=self.project_dir / "compressed.json", data=self.compress)
+        to_json(file_path=self.project_dir / "encoder.json", data=self.encoder)
 
     def _test_connection(self):
         try:
@@ -120,69 +124,61 @@ class Extractor:
 
         def __parse_prop(prop):
 
-            if isinstance(prop, bool):
-                data_type = "bool"
-            elif isinstance(prop, float):
-                data_type = "float"
-            elif isinstance(prop, int):
-                data_type = "int"
-            elif isinstance(prop, str):
-                data_type = "str"
-            elif isinstance(prop, Point):
+            if isinstance(prop, Point):
                 point_srid = prop.srid
                 if point_srid == 7203:
-                    data_type = "2d-cartesian-point"
+                    point_type = "2d-cartesian-point"
                 elif point_srid == 9157:
-                    data_type = "3d-cartesian-point"
+                    point_type = "3d-cartesian-point"
                 elif point_srid == 4326:
-                    data_type = "2d-WGS-84-point"
+                    point_type = "2d-WGS-84-point"
                 elif point_srid == 4979:
-                    data_type = "3d-WGS-84-point"
+                    point_type = "3d-WGS-84-point"
                 else:
                     raise ValueError(f"Point of srid {point_srid} is not supported")
-                prop = list(prop)
-            elif isinstance(prop, Date):
-                data_type = "date"
-            elif isinstance(prop, Time):
-                data_type = "time"
-            elif isinstance(prop, DateTime):
-                data_type = "datetime"
-            elif isinstance(prop, Duration):
-                data_type = "duration"
-                time_list = ["months", "days", "seconds", "nanoseconds"]
-                prop = dict(zip(time_list, props[prop_key]))
-            else:
-                raise ValueError(f"Encoder is not setup for {type(prop)} type from {prop} on "
-                                 f"prop key {prop_key}")
-            return data_type, prop
+                prop = [point_type, list(prop)]
 
-        node_props_types = {}
+            if isinstance(prop, Date):
+                prop = ["date", prop.iso_format()]
+
+            if isinstance(prop, Time):
+                prop = ["time", prop.iso_format()]
+
+            if isinstance(prop, DateTime):
+                prop = ["datetime", prop.iso_format()]
+
+            if isinstance(prop, Duration):
+                prop = ["duration", dict(
+                    months=prop.months,
+                    days=prop.days,
+                    seconds=prop.seconds,
+                    nanoseconds=prop.nanoseconds,
+                )]
+
+            return prop
+
         for prop_key, prop_value in props.items():
 
             if isinstance(prop_value, list):
                 prop_values = []
-                prop_types = []
                 for sub_prop_value in prop_value:
-                    prop_type, prop_value = __parse_prop(sub_prop_value)
-                    prop_types.append(prop_type)
+                    prop_value = __parse_prop(sub_prop_value)
                     prop_values.append(prop_value)
-                props[prop_key] = prop_values
-                node_props_types[prop_key] = prop_types
+                props[prop_key] = ["array", prop_values]
 
             else:
-                prop_type, prop_value = __parse_prop(prop_value)
+                prop_value = __parse_prop(prop_value)
                 props[prop_key] = prop_value
-                node_props_types[prop_key] = prop_type
 
-        return props, node_props_types
+        return props
 
     def __parse_node__(self, node):
         node_id = node.id
         node_labels = list(node.labels)
         node_props = dict(node)
-        node_props, node_props_types = self.__parse_props_types(node_props)
+        node_props = self.__parse_props_types(node_props)
 
-        return node_id, node_labels, node_props, node_props_types
+        return node_id, node_labels, node_props
 
     def _pull_nodes(self):
 
@@ -205,22 +201,24 @@ class Extractor:
 
                 # Base node object
                 node = record['node']
-                node_id, node_labels, node_props, node_props_types = self.__parse_node__(node)
+                node_id, node_labels, node_props = self.__parse_node__(node)
                 self.property_keys.update(node_props.keys())
                 self.labels.update(node_labels)
 
                 row = {'node_id': node_id, 'node_labels': node_labels,
-                       'node_props': node_props, 'node_props_types': node_props_types}
+                       'node_props': node_props}
                 extracted_data.append(row)
 
                 size_in_ram = getsizeof(extracted_data)
                 if size_in_ram > self.json_file_size:
-                    to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress)
+                    to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress,
+                            indent=self.indent_size)
                     extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress)
+                to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress,
+                        indent=self.indent_size)
 
     def _pull_relationships(self):
 
@@ -244,13 +242,13 @@ class Extractor:
 
                 # Gather starting_node
                 start_node = record['start_node']
-                start_node_id, start_node_labels, start_node_props, start_node_props_types = self.__parse_node__(start_node)
+                start_node_id, start_node_labels, start_node_props = self.__parse_node__(start_node)
                 self.property_keys.update(start_node_props.keys())
                 self.labels.update(start_node_labels)
 
                 # Gather ending_node
                 end_node = record['end_node']
-                end_node_id, end_node_labels, end_node_props, end_node_props_types = self.__parse_node__(end_node)
+                end_node_id, end_node_labels, end_node_props = self.__parse_node__(end_node)
                 self.property_keys.update(end_node_props.keys())
                 self.labels.update(end_node_labels)
 
@@ -258,23 +256,25 @@ class Extractor:
                 rel = record['rel']
                 rel_type = rel.type
                 rel_props = dict(rel)
-                rel_props, rel_props_types = self.__parse_props_types(rel_props)
+                rel_props = self.__parse_props_types(rel_props)
                 self.property_keys.update(rel_props.keys())
                 self.rel_types.add(rel_type)
 
                 row = {'start_node_id': start_node_id, 'start_node_labels': start_node_labels,
                        'end_node_id': end_node_id, 'end_node_labels': end_node_labels,
-                       'rel_type': rel_type, 'rel_props': rel_props, 'rel_props_types': rel_props_types}
+                       'rel_type': rel_type, 'rel_props': rel_props}
                 extracted_data.append(row)
 
                 size_in_ram = getsizeof(extracted_data)
                 if size_in_ram > self.json_file_size:
-                    to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress)
+                    to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress,
+                            indent=self.indent_size)
                     extracted_data = []
 
             # dump and compress remaining data
             if extracted_data:
-                to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress)
+                to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress,
+                        indent=self.indent_size)
 
     def _calc_unique_prop_key(self):
         keys_to_avoid = self.property_keys.copy()
