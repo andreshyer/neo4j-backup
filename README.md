@@ -34,14 +34,18 @@ that your user has read and show constraints privileges for downloading data, an
 
 `tqdm: >= 4.10.0`
 
-
 # Installation
 
 `pip install neo4j-backup`
 
-# Tested Neo4j Database Versions
+# Tested Neo4j Database Versions (neo4j-python driver 5.1.0)
 
 `Neo4j 4.1.0`
+`Neo4j 4.2.0`
+`Neo4j 4.3.0`
+`Neo4j 4.4.0`
+
+Support for `Neo4j 5.1.0` is coming soon
 
 # Usage
 
@@ -51,6 +55,12 @@ https://neo4j.com/docs/api/python-driver/current/api.html.
 
 There will be times when the script will ask the user for input for (y/N) questions, 
 you can set `input_yes=True` to enter yes to all input questions.
+
+# Constraints
+
+The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
+As of right now, this is the only currently supported type of constraint in this codebase.
+But support for the other constraints is currently being added.
 
 ## Extracting
 
