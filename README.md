@@ -39,6 +39,10 @@ that your user has read and show constraints privileges for downloading data, an
 
 `pip install neo4j-backup`
 
+# Tested Neo4j Database Versions
+
+`Neo4j 4.1.0`
+
 # Usage
 
 The exact parameters that should be used to access the database depends on the version of the Neo4j graph that you
@@ -98,84 +102,92 @@ if __name__ == "__main__":
 
 # Data Storage
 
-All property types can be stored in JSON format, the json encoder is set to "str".
-The default `str` encoder is used for extracting data into json files. 
-This allows for saving complex data types in Neo4j, such as points and temporal values
-(Date, DateTime, Time).
-
-```python
-from datetime import datetime
-from json import dumps
-data = {"extracted_data": datetime.now()}  # This would be real extracted data
-json_string = dumps(data, default=str)
-```
+All property types can be stored in JSON format.
+Temporal values (Date, DateTime, Time) are stored as strings in ISO format.
+Point values are stored as an array of raw values.
+Both Temporal and Point properties are stored as a list of 2 items,
+with the first index being the property type and the second index being the property.
 
 This example shows saved data from a Node with complex data types.
 
 ```json
-{
+    {
         "node_id": 71,
         "node_labels": [
             "Person"
         ],
         "node_props": {
+            "date": [
+                "date",
+                "1999-01-01"
+            ],
             "bool_example": false,
             "born": 1956,
             "int_example": 1,
-            "datetime_example": "2015-06-24T12:50:35.556000000+01:00",
             "point_3d_example": [
-                3.0,
-                0.0,
-                3.4
+                "3d-cartesian-point",
+                [
+                    3.0,
+                    0.0,
+                    2.0
+                ]
             ],
-            "localdatetime_example": "2015-07-04T19:32:24.000000000",
-            "duration": {
-                "months": 0,
-                "days": 0,
-                "seconds": 0,
-                "nanoseconds": 1
-            },
-            "date_example": "1999-01-01",
+            "localdatetime_example": [
+                "datetime",
+                "2015-07-04T19:32:24.000000000"
+            ],
             "point_2d_example": [
-                3.0,
-                0.0
+                "2d-cartesian-point",
+                [
+                    3.0,
+                    0.0
+                ]
+            ],
+            "datetime_example": [
+                "datetime",
+                "2015-06-24T12:50:35.556000000+01:00"
             ],
             "point_geo_3d_example": [
-                56.0,
-                11.0,
-                1000.0
+                "3d-WGS-84-point",
+                [
+                    3.0,
+                    0.0,
+                    1000.0
+                ]
+            ],
+            "duration_example": [
+                "duration",
+                {
+                    "months": 0,
+                    "days": 22,
+                    "seconds": 71509,
+                    "nanoseconds": 500000000
+                }
             ],
             "name": "Tom Hanks",
-            "localtime_example": "12:50:35.556000000",
+            "localtime_example": [
+                "time",
+                "12:50:35.556000000"
+            ],
             "point_geo_2d_example": [
-                56.0,
-                12.0
+                "2d-WGS-84-point",
+                [
+                    56.0,
+                    12.0
+                ]
+            ],
+            "time_example": [
+                "time",
+                "21:40:32.142000000+01:00"
             ],
             "array_example": [
-                true
+                "array",
+                [
+                    true,
+                    false
+                ]
             ],
-            "float_example": 0.334,
-            "time_example": "21:40:32.142000000+01:00"
-        },
-        "node_props_types": {
-            "bool_example": "bool",
-            "born": "int",
-            "int_example": "int",
-            "datatime_example": "datetime",
-            "point_3d_example": "3d-cartesian-point",
-            "localdatetime_example": "datetime",
-            "duration": "duration",
-            "date_example": "date",
-            "point_2d_example": "2d-cartesian-point",
-            "point_geo_3d_example": "3d-WGS-84-point",
-            "name": "str",
-            "localtime_example": "time",
-            "point_geo_2d_example": "2d-WGS-84-point",
-            "array_example": [
-                "bool"
-            ],
-            "float_example": "float",
-            "time_example": "time"
+            "float_example": 0.334
         }
     }
 ```
@@ -195,53 +207,7 @@ An example relationship is stored as:
         ],
         "rel_type": "DIRECTED",
         "rel_props": {
-            "bool_example": false,
-            "int_example": 1,
-            "datatime_example": "2015-06-24T12:50:35.556000000+01:00",
-            "point_3d_example": [
-                3.0,
-                0.0,
-                3.4
-            ],
-            "localdatetime_example": "2015-07-04T19:32:24.000000000",
-            "duration": {
-                "months": 0,
-                "days": 0,
-                "seconds": 0,
-                "nanoseconds": 1
-            },
-            "date_example": "1999-01-01",
-            "point_2d_example": [
-                3.0,
-                0.0
-            ],
-            "point_geo_3d_example": [
-                56.0,
-                11.0,
-                1000.0
-            ],
-            "localtime_example": "12:50:35.556000000+00:00",
-            "point_geo_2d_example": [
-                56.0,
-                12.0
-            ],
-            "float_example": 0.334,
-            "time_example": "21:40:32.142000000+01:00"
-        },
-        "rel_props_types": {
-            "bool_example": "bool",
-            "int_example": "int",
-            "datatime_example": "datetime",
-            "point_3d_example": "3d-cartesian-point",
-            "localdatetime_example": "datetime",
-            "duration": "duration",
-            "date_example": "date",
-            "point_2d_example": "2d-cartesian-point",
-            "point_geo_3d_example": "3d-WGS-84-point",
-            "localtime_example": "time",
-            "point_geo_2d_example": "2d-WGS-84-point",
-            "float_example": "float",
-            "time_example": "time"
+            "when": 2001 
         }
     }
 ```
@@ -250,11 +216,7 @@ The full list of supported property types to be extracted are:
 Integer, Float, String, Boolean, Point, Date, Time, LocalTime, DateTime, LocalDateTime, and Duration.
 As well as arrays, but arrays are treated as second class properties and have many restrictions in Neo4j.
 
-The type are saved as:
-int, float, str, bool, date, time, datetime, duration, 
-2d-cartesian-point, 3d-cartesian-point, 2d-WGS-84-point, and 3d-WGS-84-point.
-
-While Temporal values can be saved, the python-neo4j driver makes no distinction between
+Temporal values can be saved, but the python-neo4j driver makes no distinction between
 - Time and LocalTime
 - DateTime and LocalDateTime
 
