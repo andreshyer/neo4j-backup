@@ -45,7 +45,7 @@ that your user has read and show constraints privileges for downloading data, an
 `Neo4j 4.3.0`
 `Neo4j 4.4.0`
 
-Support for `Neo4j 5.1.0` is coming soon
+Support for `Neo4j 1.x`, `Neo4j 2.x`,`Neo4j 3.x`, and `Neo4j 5.x` is coming before production release.
 
 # Usage
 
