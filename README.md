@@ -24,7 +24,7 @@ This repo differs from most other Neo4j backup repos.
 For this tool, the Neo4j graph does not need to be a specific instance. 
 This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
 The only requirements are that the python neo4j-driver needs to be able to connect to the database,
-that your user has read privileges for downloading data, and write privileges for importing data.
+that your user has read and show constraints privileges for downloading data, and write privileges for importing data.
 
 # Packages required
 
@@ -64,11 +64,13 @@ if __name__ == "__main__":
 
     database = "neo4j"
 
-    project_dir = "data_Dump"
+    project_dir = "data_dump"
     input_yes = False
     compress = True
-    extractor = Extractor(project_dir="data_Dump", driver=driver, database=database,
-                          input_yes=input_yes, compress=compress)
+    indent_size = 4  # Indent of json files
+    json_file_size: int = int("0xFFFF", 16)  # Size of data in memory before dumping
+    extractor = Extractor(project_dir=project_dir, driver=driver, database=database,
+                          input_yes=input_yes, compress=compress, indent_size=indent_size)
     extractor.extract_data()
 ```
 
@@ -86,11 +88,11 @@ if __name__ == "__main__":
     trust = "TRUST_ALL_CERTIFICATES"
     driver = GraphDatabase.driver(uri, auth=(username, password), encrypted=encrypted, trust=trust)
 
-    database = "neo4j"
+    database = "dev"
 
-    project_dir = "data_Dump"
+    project_dir = "data_dump"
     input_yes = False
-    importer = Importer(project_dir="data_Dump", driver=driver, database=database, input_yes=input_yes)
+    importer = Importer(project_dir=project_dir, driver=driver, database=database, input_yes=input_yes)
     importer.import_data()
 ```
 
@@ -120,7 +122,7 @@ This example shows saved data from a Node with complex data types.
             "bool_example": false,
             "born": 1956,
             "int_example": 1,
-            "datatime_example": "2015-06-24T12:50:35.556000000+01:00",
+            "datetime_example": "2015-06-24T12:50:35.556000000+01:00",
             "point_3d_example": [
                 3.0,
                 0.0,
