@@ -102,7 +102,7 @@ class Importer:
 
             # Create dummy constraints on each node label, helps speed up inserting significantly
             for node_label in tqdm(self.labels, desc='Applying Temporary Constraints'):
-                constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} IF NOT EXISTS ON " \
+                constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} ON " \
                              f"(m:{node_label}) ASSERT (m.{self.unique_prop_key}) IS UNIQUE"
                 session.run(constraint)
 
@@ -273,11 +273,11 @@ class Importer:
             for node_labels in tqdm(self.labels, desc='Removing Temporary Constraints'):
                 node_labels = node_labels.split(":")
                 for node_label in node_labels:
-                    constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key} IF EXISTS"
+                    constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key}"
                     session.run(constraint)
 
             # Apply real constraints
             for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
                 constraint = constraint.split("CONSTRAINT")[1]
-                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
+                constraint = "CREATE CONSTRAINT" + constraint
                 session.run(constraint)
