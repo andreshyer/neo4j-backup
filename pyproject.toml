@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "neo4j_backup"
-version = "0.2.4"
+version = "0.3.0"
 description = "A simple way to backup and restore Neo4j databases without using dump files."
 readme = "README.md"
 authors = [{ name = "Andres Hyer", email = "andreshyer@gmail.com" }]
@@ -20,8 +20,9 @@ keywords = ["neo4j"]
 dependencies = [
     "neo4j>=4.3.0",
     "tqdm>=4.10.0",
+    "orjson>=2.0.0"
 ]
-requires-python = ">=3.5"
+requires-python = ">=3.6"
 
 [project.urls]
 Homepage = "https://github.com/andreshyer/neo4j-backup"
