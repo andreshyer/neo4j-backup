@@ -106,12 +106,6 @@ if __name__ == "__main__":
 
 # Data Storage
 
-All property types can be stored in JSON format.
-Temporal values (Date, DateTime, Time) are stored as strings in ISO format.
-Point values are stored as an array of raw values.
-Both Temporal and Point properties are stored as a list of 2 items,
-with the first index being the property type and the second index being the property.
-
 This example shows saved data from a Node with complex data types.
 
 ```json
