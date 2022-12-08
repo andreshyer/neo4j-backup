@@ -38,14 +38,9 @@ that your user has read and show constraints privileges for downloading data, an
 
 `pip install neo4j-backup`
 
-# Tested Neo4j Database Versions (neo4j-python driver 5.1.0)
+# Supported Neo4j Database Versions
 
-`Neo4j 4.1.0`
-`Neo4j 4.2.0`
-`Neo4j 4.3.0`
-`Neo4j 4.4.0`
-
-Support for `Neo4j 1.x`, `Neo4j 2.x`,`Neo4j 3.x`, and `Neo4j 5.x` is coming before production release.
+`Neo4j >= 4.x`
 
 # Usage
 
@@ -60,7 +55,6 @@ you can set `input_yes=True` to enter yes to all input questions.
 
 The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
 As of right now, this is the only currently supported type of constraint in this codebase.
-But support for the other constraints is currently being added.
 
 ## Extracting
 
@@ -121,105 +115,50 @@ with the first index being the property type and the second index being the prop
 This example shows saved data from a Node with complex data types.
 
 ```json
-    {
-        "node_id": 71,
-        "node_labels": [
-            "Person"
-        ],
-        "node_props": {
-            "date": [
-                "date",
-                "1999-01-01"
-            ],
-            "bool_example": false,
-            "born": 1956,
-            "int_example": 1,
-            "point_3d_example": [
-                "3d-cartesian-point",
-                [
-                    3.0,
-                    0.0,
-                    2.0
-                ]
-            ],
-            "localdatetime_example": [
-                "datetime",
-                "2015-07-04T19:32:24.000000000"
-            ],
-            "point_2d_example": [
-                "2d-cartesian-point",
-                [
-                    3.0,
-                    0.0
-                ]
-            ],
-            "datetime_example": [
-                "datetime",
-                "2015-06-24T12:50:35.556000000+01:00"
-            ],
-            "point_geo_3d_example": [
-                "3d-WGS-84-point",
-                [
-                    3.0,
-                    0.0,
-                    1000.0
-                ]
-            ],
-            "duration_example": [
-                "duration",
-                {
-                    "months": 0,
-                    "days": 22,
-                    "seconds": 71509,
-                    "nanoseconds": 500000000
-                }
-            ],
-            "name": "Tom Hanks",
-            "localtime_example": [
-                "time",
-                "12:50:35.556000000"
-            ],
-            "point_geo_2d_example": [
-                "2d-WGS-84-point",
-                [
-                    56.0,
-                    12.0
-                ]
-            ],
-            "time_example": [
-                "time",
-                "21:40:32.142000000+01:00"
-            ],
-            "array_example": [
-                "array",
-                [
-                    true,
-                    false
-                ]
-            ],
-            "float_example": 0.334
-        }
-    }
+{
+  "node_id": 71,
+  "node_labels": "Person:XX",
+  "node_props": {
+    "date": "date('1999-01-01')",
+    "bool_example": false,
+    "born": 1956,
+    "int_example": 1,
+    "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+    "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
+    "date_example": "date('1999-01-01')",
+    "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
+    "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+    "duration_example": "duration('P5M1DT12H')",
+    "point_geo_3d_example": "point({x: 3.0, y: 0.0, z: 1000.0, crs: 'wgs-84-3d'})",
+    "odd_prop": "\"time('21:40:32.142000000+01:00')\"",
+    "name": "\"Tom Hanks\"",
+    "localtime_example": "time('12:50:35.556000000+00:00')",
+    "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+    "time_example": "time('21:40:32.142000000+01:00')",
+    "float_example": 0.334,
+    "array_example": [
+      true,
+      false
+    ]
+  }
+}
 ```
-
+Note that the `odd_prop` is a string that is formatted as a temporal time iso_string,
+but is actually is string. The `odd_prop` will properly be imported as a string.
 The properties saved for relationships are very similar.
 An example relationship is stored as:
 
 ```json
 {
-        "start_node_id": 71,
-        "start_node_labels": [
-            "Person"
-        ],
-        "end_node_id": 85,
-        "end_node_labels": [
-            "Movie"
-        ],
-        "rel_type": "DIRECTED",
-        "rel_props": {
-            "when": 2001 
-        }
-    }
+  "start_node_id": 71,
+  "end_node_id": 67,
+  "rel_type": "ACTED_IN",
+  "rel_props": {
+    "roles": [
+      "\"Joe Fox\""
+    ]
+  }
+}
 ```
 
 The full list of supported property types to be extracted are:
@@ -250,9 +189,9 @@ All the data is extracted to the tree structure:
   - relationships_<index>.json.gz
   - ...
 - compressed.json -> bool weather or not data is compresses
-- constraints.json -> List of constraints
-- constraints_names.json -> Names of constraints in Neo4j db
+- uniqueness_constraints.json -> List of uniqueness constraints in Neo4j db
 - db_id.json -> ID of db
+- dbms_version.json -> Version of dbms
 - node_labels.json -> List of all Node labels
 - property_keys.json -> List of all property keys
 - rel_types.json -> List of all Relationship types
@@ -260,14 +199,7 @@ All the data is extracted to the tree structure:
 
 # Notes About Importing Data into Neo4j
 
-This may not be the best tool to back up data if speed is a concern.
-This tool is significantly slower than the built-in Dump tool Neo4j provides.
-The selling point of this script is also its biggest downfall, all calls to Neo4j are done with Cypher.
-This adds a significant amount of overhead that can be avoided if the direct files of a graph can be accessed.
-Also, while the raw data is machine-readable, 
-it still needs to be manipulated by the end user to insert it into other databases.
-
-Another note, an internal ID property is made when creating Nodes and properties. 
+An internal ID property is made when creating Nodes and properties. 
 Since this script does not read the underlying file in the Neo4j database, 
 some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each Node is not reasonable.
