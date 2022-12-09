@@ -55,6 +55,9 @@ you can set `input_yes=True` to enter yes to all input questions.
 
 The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
 As of right now, this is the only currently supported type of constraint in this codebase.
+If you need to transfer the extracted data to an Enterprise edition database,
+the other constraints can be added after importing the data
+(assuming the data is structured in compliance with such constraints).
 
 ## Extracting
 
@@ -116,48 +119,68 @@ This example shows saved data from a Node with complex data types.
 
 ```json
 {
-  "node_id": 71,
-  "node_labels": "Person:XX",
-  "node_props": {
-    "date": "date('1999-01-01')",
-    "bool_example": false,
-    "born": 1956,
-    "int_example": 1,
-    "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
-    "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
-    "date_example": "date('1999-01-01')",
-    "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
-    "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
-    "duration_example": "duration('P5M1DT12H')",
-    "point_geo_3d_example": "point({x: 3.0, y: 0.0, z: 1000.0, crs: 'wgs-84-3d'})",
-    "odd_prop": "\"time('21:40:32.142000000+01:00')\"",
-    "name": "\"Tom Hanks\"",
-    "localtime_example": "time('12:50:35.556000000+00:00')",
-    "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
-    "time_example": "time('21:40:32.142000000+01:00')",
-    "float_example": 0.334,
-    "array_example": [
-      true,
-      false
-    ]
-  }
+    "node_id": 72,
+    "node_labels": "Person:XX",
+    "node_props": {
+        "bool_example": false,
+        "born": 1956,
+        "int_example": 1,
+        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "date('1999-01-01')",
+        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "duration('P5M1DT12H')",
+        "duration_example": "duration('P5M1DT12H')",
+        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "name": "Tom Hanks",
+        "localtime_example": "time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "float_example": 0.334,
+        "time_example": "time('21:40:32.142000000+01:00')",
+        "array_example": [
+            true,
+            false
+        ]
+    }
 }
 ```
-Note that the `odd_prop` is a string that is formatted as a temporal time iso_string,
-but is actually is string. The `odd_prop` will properly be imported as a string.
-The properties saved for relationships are very similar.
-An example relationship is stored as:
+Note that the `odd_prop` was originally stored as a string in the database.
+The `$` denotes that the string is a literal string.
+Relationships are stored in a very similar fashion.
+Example showing a Relationship with complex property values.
 
 ```json
 {
-  "start_node_id": 71,
-  "end_node_id": 67,
-  "rel_type": "ACTED_IN",
-  "rel_props": {
-    "roles": [
-      "\"Joe Fox\""
-    ]
-  }
+    "rel_id": 224,
+    "start_node_id": 71,
+    "end_node_id": 150,
+    "rel_type": "ACTED_IN",
+    "rel_props": {
+        "bool_example": false,
+        "roles": [
+            "Chuck Noland"
+        ],
+        "born": 1956,
+        "int_example": 1,
+        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "date('1999-01-01')",
+        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "duration('P5M1DT12H')",
+        "duration_example": "duration('P5M1DT12H')",
+        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "name": "Tom Hanks",
+        "localtime_example": "time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "float_example": 0.334,
+        "time_example": "time('21:40:32.142000000+01:00')",
+        "array_example": [
+            true,
+            false
+        ]
+    }
 }
 ```
 
@@ -169,8 +192,7 @@ Temporal values can be saved, but the python-neo4j driver makes no distinction b
 - Time and LocalTime
 - DateTime and LocalDateTime
 
-The only difference with the prefix local being that when creating the property,
-Neo4j will first convert local times to global times.
+The only difference with the time zone cannot be specified in local times.
 
 The following point SRID types are supported and saved as:
 - 7203 : 2d-cartesian-point
@@ -189,12 +211,11 @@ All the data is extracted to the tree structure:
   - relationships_<index>.json.gz
   - ...
 - compressed.json -> bool weather or not data is compresses
-- uniqueness_constraints.json -> List of uniqueness constraints in Neo4j db
 - db_id.json -> ID of db
-- dbms_version.json -> Version of dbms
 - node_labels.json -> List of all Node labels
 - property_keys.json -> List of all property keys
 - rel_types.json -> List of all Relationship types
+- uniqueness_constraints.json -> List of uniqueness constraints in Neo4j db
 - unique_prop_key.json -> Some unique property that does not exist in db
 
 # Notes About Importing Data into Neo4j

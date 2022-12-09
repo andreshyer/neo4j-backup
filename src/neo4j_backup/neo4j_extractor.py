@@ -44,7 +44,6 @@ class Extractor:
         self.rel_types: set = set()
         self.uniqueness_constraints: list = []
         self.db_id: str = ""
-        self.dbms_version: str = ""
 
         self.uniqueness_constraints_names: list = []
 
@@ -56,7 +55,6 @@ class Extractor:
         self._verify_db_not_empty()
 
         self._pull_db_id()  # Get ID of database
-        self._get_dbms_version()  # Get version of the current database
 
         if exists(self.project_dir):
 
@@ -85,7 +83,6 @@ class Extractor:
 
         # Store meta data
         to_json(file_path=self.project_dir / f"db_id.json", data=self.db_id)
-        to_json(file_path=self.project_dir / f"dbms_version.json", data=self.dbms_version)
         to_json(file_path=self.project_dir / f"unique_prop_key.json", data=unique_prop_key)
         to_json(file_path=self.project_dir / f"uniqueness_constraints.json", data=self.uniqueness_constraints)
         to_json(file_path=self.project_dir / "property_keys.json", data=list(self.property_keys))
@@ -116,17 +113,11 @@ class Extractor:
             for result in results:
                 self.db_id = dict(result)['id']
 
-    def _get_dbms_version(self):
-        with self.driver.session(database=self.database) as session:
-            results = session.run("CALL dbms.components")
-            for result in results:
-                self.dbms_version = result["versions"][0]
-
     def _pull_constraints(self):
 
         with self.driver.session(database=self.database) as session:
 
-            if int(self.dbms_version.split(".")[0]) <= 4:
+            try:
                 results = session.run("CALL db.constraints")
                 for result in results:
 
@@ -135,7 +126,6 @@ class Extractor:
 
                     # Verify is uniqueness constraint
                     if "unique" in constraint_description:
-
                         # Get the node label
                         node_label = constraint_description.split(":")[1]
                         node_label = node_label.split(")")[0].strip()
@@ -152,7 +142,7 @@ class Extractor:
                         )
                         self.uniqueness_constraints.append(constraint)
                         self.uniqueness_constraints_names.append(constraint_name)
-            else:
+            except:
                 results = session.run("SHOW CONSTRAINTS")
                 for result in results:
                     if result["type"] == "UNIQUENESS" and result["entityType"] == "NODE":
@@ -199,8 +189,9 @@ class Extractor:
                 prop = f"duration('{prop.iso_format()}')"
 
             elif isinstance(prop, str):
-                prop = prop.replace('"', '\\"')
-                prop = f'"{prop}"'
+                literals = ["point(", "date(", "time(", "datetime(", "duration("]
+                for literal in literals:
+                    prop = prop.replace(literal, "$" + literal)
 
             return prop
 
@@ -255,7 +246,7 @@ class Extractor:
                     for node_label in node_labels.split(":"):
                         self.labels.add(node_label)
 
-                row = {'node_id': node_id, 'node_labels': node_labels,
+                row = {'node_id': counter, 'node_labels': node_labels,
                        'node_props': node_props}
                 extracted_data.append(row)
 
@@ -273,10 +264,8 @@ class Extractor:
     def _pull_relationships(self):
 
         query = """
-
-        MATCH (start_node)-[rel]->(end_node)
+        MATCH (start_node)-[rel]-(end_node)
         RETURN start_node, end_node, rel
-
         """
 
         extracted_data = []
@@ -304,7 +293,8 @@ class Extractor:
                 self.property_keys.update(rel_props.keys())
                 self.rel_types.add(rel_type)
 
-                row = {'start_node_id': start_node_id,
+                row = {'rel_id': counter,
+                       'start_node_id': start_node_id,
                        'end_node_id': end_node_id,
                        'rel_type': rel_type,
                        'rel_props': rel_props}

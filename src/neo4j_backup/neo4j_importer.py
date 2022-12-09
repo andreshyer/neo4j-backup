@@ -3,7 +3,7 @@ from pathlib import Path
 from os import getcwd
 
 from neo4j import GraphDatabase
-from neo4j.exceptions import ServiceUnavailable, CypherSyntaxError
+from neo4j.exceptions import ServiceUnavailable
 
 from ._backends import from_json
 
@@ -31,11 +31,6 @@ class Importer:
         self.labels: list = from_json(self.project_dir / 'node_labels.json')
         self.relationship_types: list = from_json(self.project_dir / 'rel_types.json')
         self.uniqueness_constraints: list = from_json(self.project_dir / 'uniqueness_constraints.json')
-
-        with self.driver.session(database=self.database) as session:
-            results = session.run("CALL dbms.components")
-            for result in results:
-                self.dbms_version = result["versions"][0]
 
         self.relationships_files = []
         for file_path in self.data_dir.iterdir():
@@ -71,6 +66,7 @@ class Importer:
             self._import_relationships_file(file_path)
 
         # Remove dummy constraints and properties, add real constraints, fix temporal/spatial values
+        self._fix_node_temporal_spatial_values()
         self._cleanup()
 
     def _test_connection(self):
@@ -111,7 +107,7 @@ class Importer:
             """
             session.run(constraint_str)
             return
-        except CypherSyntaxError:
+        except:
             constraint_str = f"""
             CREATE CONSTRAINT {constraint['constraint_name']} 
             ON (n:{constraint['node_label']}) 
@@ -189,53 +185,80 @@ class Importer:
                 MATCH (end_node)
                     WHERE end_node.{self.unique_prop_key} = row["end_node_id"]
                 CREATE (start_node)-[r:{relationship}]->(end_node)
+                SET r.{self.unique_prop_key} = row["rel_id"]
                 SET r += row["rel_props"]
                 """
 
                 session.run(query, parameters={"rows": filtered_data})
 
+    def _fix_node_temporal_spatial_values(self):
+
+        literals = ["point(", "date(", "time(", "datetime(", "duration("]
+
+        with self.driver.session(database=self.database) as session:
+
+            # Fix nodes
+            query = f"""
+            MATCH (node)
+            RETURN (node)
+            """
+
+            # Gather number of nodes
+            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
+            results = session.run(query)
+
+            # Going through all properties in all nodes
+            for record in tqdm(results, total=number_of_nodes, desc="Extracting Nodes"):
+                node = record['node']
+                node_props = dict(node)
+                for prop_key, prop_value in node_props.items():
+                    if isinstance(prop_value, str):
+                        for literal in literals:
+                            if prop_value[:len(literal)] == literal:
+
+                                # If property is a spatial or temporal value, update the property
+                                query = f"""
+                                MATCH (n)
+                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
+                                SET n.{prop_key} = {prop_value}
+                                RETURN n
+                                """
+                                session.run(query)
+
+                            elif prop_value[:len(literal) + 1] == "$" + literal:
+
+                                # If property is a literal string with a spartial/temporal piece
+                                # Remove the literal identifier
+                                prop_value = prop_value[1:]
+                                query = f"""
+                                MATCH (n)
+                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
+                                SET n.{prop_key} = "{prop_value}"
+                                """
+                                session.run(query)
+
     def _cleanup(self):
 
         with self.driver.session(database=self.database) as session:
 
-            # Spatial and temporal values need additional cleanup
-            literals = ["point(", "date(", "time(", "datetime(", "duration("]
-            query = f"""
-            MATCH (node)
-            RETURN node
-            """
-
-            # Gather number of nodes in database
-            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
-            results = session.run(query)
-
-            # Go through all nodes, cleaning up Temporal/Spatial/Literal Values
-            for record in tqdm(results, total=number_of_nodes, desc="Cleaning up Temporal/Spatial/Literal Values"):
-                node = record['node']
-                node_props = dict(node)
-                node_unique_prop = node_props[self.unique_prop_key]
-                for key, value in node_props.items():
-                    if isinstance(value, str):
-                        for literal in literals:
-                            if value[:len(literal)] == literal:
-                                filter_query = f"""
-                                MATCH (n)
-                                WHERE n.{self.unique_prop_key} = {node_unique_prop}
-                                SET n.{key} = {value}
-                                """
-                                session.run(filter_query)
-
             # Drop dummy unique property key used for merging nodes
             query = f"""
-                MATCH (a) WHERE a.{self.unique_prop_key} IS NOT NULL
-                REMOVE a.{self.unique_prop_key}
+            MATCH (a) WHERE a.{self.unique_prop_key} IS NOT NULL
+            REMOVE a.{self.unique_prop_key}
+            """
+            session.run(query)
+
+            # Drop dummy unique property key used for match relationships in cleanup
+            query = f"""
+            MATCH ()-[r]-() WHERE r.{self.unique_prop_key} IS NOT NULL
+            REMOVE r.{self.unique_prop_key}
             """
             session.run(query)
 
             # Drop dummy constraints used to speed up merging nodes
             for node_labels in tqdm(self.labels, desc='Removing Temporary Constraints'):
                 if ":" not in node_labels:
-                    constraint = f" DROP CONSTRAINT {node_labels}_{self.unique_prop_key}"
+                    constraint = f"DROP CONSTRAINT {node_labels}_{self.unique_prop_key}"
                     session.run(constraint)
 
             # Apply real constraints
