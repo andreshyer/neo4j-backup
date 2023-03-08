@@ -45,11 +45,19 @@ class Extractor:
         self.uniqueness_constraints: list = []
         self.db_id: str = ""
 
+        self.node_ids: set = set()
+        self.working_extracted_nodes: list = list()
+        self.working_extracted_rel: list = list()
+        self.node_counter: int = 0
+        self.rel_counter: int = 0
+
         self.uniqueness_constraints_names: list = []
 
         self.json_file_size: int = json_file_size  # Default size of json objects in memory
 
     def extract_data(self):
+
+        # Extracts data
 
         self._test_connection()
         self._verify_db_not_empty()
@@ -75,8 +83,16 @@ class Extractor:
         if self.pull_uniqueness_constraints:
             self._pull_constraints()  # get constraints of database
 
-        self._pull_nodes()  # get nodes in database
         self._pull_relationships()  # get relationship in database
+        self._pull_lonely_nodes()  # get nodes that are lonely in database
+
+        # dump and compress remaining data
+        if self.working_extracted_nodes:
+            to_json(self.data_dir / f"nodes_{self.node_counter}.json", self.working_extracted_nodes, compress=self.compress,
+                    indent=self.indent_size)
+        if self.working_extracted_rel:
+            to_json(self.data_dir / f"relationships_{self.rel_counter}.json", self.working_extracted_rel, compress=self.compress,
+                    indent=self.indent_size)
 
         # calculate a unique prop key to act a dummy id prop for importing
         unique_prop_key = self._calc_unique_prop_key()
@@ -117,6 +133,7 @@ class Extractor:
 
         with self.driver.session(database=self.database) as session:
 
+            # Older verisons
             try:
                 results = session.run("CALL db.constraints")
                 for result in results:
@@ -142,6 +159,8 @@ class Extractor:
                         )
                         self.uniqueness_constraints.append(constraint)
                         self.uniqueness_constraints_names.append(constraint_name)
+
+            # Newer verisons
             except:
                 results = session.run("SHOW CONSTRAINTS")
                 for result in results:
@@ -160,8 +179,10 @@ class Extractor:
     @staticmethod
     def __parse_props_types(props):
 
+        # Custom Parser
         def __parse_prop(prop):
 
+            # Treat points seperately
             if isinstance(prop, Point):
                 point_srid = prop.srid
                 prop = list(prop)
@@ -176,27 +197,26 @@ class Extractor:
                 else:
                     raise ValueError(f"Point of srid {point_srid} is not supported")
 
+            # Treat temporal values seperately
             elif isinstance(prop, Date):
                 prop = f"date('{prop.iso_format()}')"
-
             elif isinstance(prop, Time):
                 prop = f"time('{prop.iso_format()}')"
-
             elif isinstance(prop, DateTime):
                 prop = f"datetime('{prop.iso_format()}')"
-
             elif isinstance(prop, Duration):
                 prop = f"duration('{prop.iso_format()}')"
-
             elif isinstance(prop, str):
                 literals = ["point(", "date(", "time(", "datetime(", "duration("]
                 for literal in literals:
                     prop = prop.replace(literal, "$" + literal)
 
+            # Otherwise, return the prop
             return prop
 
         for prop_key, prop_value in props.items():
 
+            # Treat each item in an array
             if isinstance(prop_value, list):
                 prop_values = []
                 for sub_prop_value in prop_value:
@@ -211,6 +231,7 @@ class Extractor:
         return props
 
     def __parse_node__(self, node):
+        # Grab important items from a node object
         node_id = node.id
         node_labels = list(node.labels)
         node_labels = sorted(node_labels, key=str.lower)
@@ -218,98 +239,97 @@ class Extractor:
         node_props = dict(node)
         node_props = self.__parse_props_types(node_props)
         return node_id, node_labels, node_props
+    
+    def _update_node(self, node):
 
-    def _pull_nodes(self):
+        # Updates the current working nodes
 
-        query = """
-        MATCH (node)
-        RETURN node
-        """
+        node_id, node_labels, node_props = self.__parse_node__(node)
+        
+        # Only update if node does not already updated
+        if node_id not in self.node_ids:
 
-        extracted_data = []
+            self.node_counter += 1
 
-        with self.driver.session(database=self.database) as session:
-            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
-            results = session.run(query)
+            row = {'node_id': node_id, 'node_labels': node_labels,
+                   'node_props': node_props}
 
-            counter = 0
-            for record in tqdm(results, total=number_of_nodes, desc="Extracting Nodes"):
-                counter += 1
+            self.working_extracted_nodes.append(row)
 
-                # Base node object
-                node = record['node']
-                node_id, node_labels, node_props = self.__parse_node__(node)
-                self.property_keys.update(node_props.keys())
+            self.node_ids.add(node_id)
+            self.property_keys.update(node_props.keys())
+            self.labels.add(node_labels)
 
-                self.labels.add(node_labels)
-                if ":" in node_labels:
-                    for node_label in node_labels.split(":"):
-                        self.labels.add(node_label)
+            if ":" in node_labels:
+                for node_label in node_labels.split(":"):
+                    self.labels.add(node_label)
 
-                row = {'node_id': counter, 'node_labels': node_labels,
-                       'node_props': node_props}
-                extracted_data.append(row)
-
-                size_in_ram = getsizeof(extracted_data)
-                if size_in_ram > self.json_file_size:
-                    to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress,
-                            indent=self.indent_size)
-                    extracted_data = []
-
-            # dump and compress remaining data
-            if extracted_data:
-                to_json(self.data_dir / f"nodes_{counter}.json", extracted_data, compress=self.compress,
+            size_in_ram = getsizeof(self.working_extracted_nodes)
+            if size_in_ram > self.json_file_size:
+                to_json(self.data_dir / f"nodes_{self.node_counter}.json", self.extracted_data, compress=self.compress,
                         indent=self.indent_size)
+                self.working_extracted_nodes = []
 
+    def _update_rel(self, rel, start_node, end_node):
+        # Gather relationship
+        rel_type = rel.type
+        rel_props = dict(rel)
+        rel_props = self.__parse_props_types(rel_props)
+
+        self.property_keys.update(rel_props.keys())
+        self.rel_types.add(rel_type)
+
+        row = {'rel_id': self.rel_counter,
+                'start_node_id': start_node.id,
+                'end_node_id': end_node.id,
+                'rel_type': rel_type,
+                'rel_props': rel_props}
+        self.working_extracted_rel.append(row)
+
+        self.rel_counter += 1
+
+        size_in_ram = getsizeof(self.working_extracted_rel)
+        if size_in_ram > self.json_file_size:
+            to_json(self.data_dir / f"relationships_{self.rel_counter}.json", self.working_extracted_rel, compress=self.compress,
+                    indent=self.indent_size)
+            self.working_extracted_rel = []
+    
     def _pull_relationships(self):
 
         query = """
-        MATCH (start_node)-[rel]-(end_node)
+        MATCH (start_node)-[rel]->(end_node)
         RETURN start_node, end_node, rel
         """
-
-        extracted_data = []
 
         with self.driver.session(database=self.database) as session:
             number_of_relationships = session.run("MATCH p=(start_node)-[rel]->(end_node) RETURN COUNT(p)").value()[0]
             results = session.run(query)
 
-            counter = 0
             for record in tqdm(results, total=number_of_relationships,
                                desc="Extracting Relationships"):
-                counter += 1
+                start_node = record['start_node']
+                end_node = record['end_node']
+                rel = record["rel"]
 
-                # Gather starting_node
-                start_node_id = record['start_node'].id
+                self._update_node(start_node)
+                self._update_node(end_node)
+                self._update_rel(rel, start_node, end_node)
 
-                # Gather ending_node
-                end_node_id = record['end_node'].id
+    def _pull_lonely_nodes(self):
 
-                # Gather relationship
-                rel = record['rel']
-                rel_type = rel.type
-                rel_props = dict(rel)
-                rel_props = self.__parse_props_types(rel_props)
-                self.property_keys.update(rel_props.keys())
-                self.rel_types.add(rel_type)
+        query = """
+        MATCH (node)
+        WHERE NOT (node)-[]-()
+        RETURN node
+        """
 
-                row = {'rel_id': counter,
-                       'start_node_id': start_node_id,
-                       'end_node_id': end_node_id,
-                       'rel_type': rel_type,
-                       'rel_props': rel_props}
-                extracted_data.append(row)
-
-                size_in_ram = getsizeof(extracted_data)
-                if size_in_ram > self.json_file_size:
-                    to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress,
-                            indent=self.indent_size)
-                    extracted_data = []
-
-            # dump and compress remaining data
-            if extracted_data:
-                to_json(self.data_dir / f"relationships_{counter}.json", extracted_data, compress=self.compress,
-                        indent=self.indent_size)
+        with self.driver.session(database=self.database) as session:
+            number_of_nodes = session.run(f"MATCH (node) WHERE NOT (node)-[]-() RETURN COUNT(node)").value()[0]
+            results = session.run(query)
+            for record in tqdm(results, total=number_of_nodes, desc="Extracting Lonely Nodes"):
+                # Base node object
+                node = record['node']
+                self._update_node(node)
 
     def _calc_unique_prop_key(self):
         keys_to_avoid = self.property_keys.copy()
