@@ -24,7 +24,7 @@ This repo differs from most other Neo4j backup repos.
 For this tool, the Neo4j graph does not need to be a specific instance. 
 This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
 The only requirements are that the python neo4j-driver needs to be able to connect to the database,
-that your user has read privileges for downloading data, and write privileges for importing data.
+that your user has read and show constraints privileges for downloading data, and write privileges for importing data.
 
 # Packages required
 
@@ -34,10 +34,13 @@ that your user has read privileges for downloading data, and write privileges fo
 
 `tqdm: >= 4.10.0`
 
-
 # Installation
 
 `pip install neo4j-backup`
+
+# Supported Neo4j Database Versions
+
+`Neo4j >= 4.x`
 
 # Usage
 
@@ -47,6 +50,14 @@ https://neo4j.com/docs/api/python-driver/current/api.html.
 
 There will be times when the script will ask the user for input for (y/N) questions, 
 you can set `input_yes=True` to enter yes to all input questions.
+
+# Constraints
+
+The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
+As of right now, this is the only currently supported type of constraint in this codebase.
+If you need to transfer the extracted data to an Enterprise edition database,
+the other constraints can be added after importing the data
+(assuming the data is structured in compliance with such constraints).
 
 ## Extracting
 
@@ -64,11 +75,13 @@ if __name__ == "__main__":
 
     database = "neo4j"
 
-    project_dir = "data_Dump"
+    project_dir = "data_dump"
     input_yes = False
     compress = True
-    extractor = Extractor(project_dir="data_Dump", driver=driver, database=database,
-                          input_yes=input_yes, compress=compress)
+    indent_size = 4  # Indent of json files
+    json_file_size: int = int("0xFFFF", 16)  # Size of data in memory before dumping
+    extractor = Extractor(project_dir=project_dir, driver=driver, database=database,
+                          input_yes=input_yes, compress=compress, indent_size=indent_size)
     extractor.extract_data()
 ```
 
@@ -86,178 +99,94 @@ if __name__ == "__main__":
     trust = "TRUST_ALL_CERTIFICATES"
     driver = GraphDatabase.driver(uri, auth=(username, password), encrypted=encrypted, trust=trust)
 
-    database = "neo4j"
+    database = "dev"
 
-    project_dir = "data_Dump"
+    project_dir = "data_dump"
     input_yes = False
-    importer = Importer(project_dir="data_Dump", driver=driver, database=database, input_yes=input_yes)
+    importer = Importer(project_dir=project_dir, driver=driver, database=database, input_yes=input_yes)
     importer.import_data()
 ```
 
 # Data Storage
 
-All property types can be stored in JSON format, the json encoder is set to "str".
-The default `str` encoder is used for extracting data into json files. 
-This allows for saving complex data types in Neo4j, such as points and temporal values
-(Date, DateTime, Time).
-
-```python
-from datetime import datetime
-from json import dumps
-data = {"extracted_data": datetime.now()}  # This would be real extracted data
-json_string = dumps(data, default=str)
-```
-
 This example shows saved data from a Node with complex data types.
 
 ```json
 {
-        "node_id": 71,
-        "node_labels": [
-            "Person"
-        ],
-        "node_props": {
-            "bool_example": false,
-            "born": 1956,
-            "int_example": 1,
-            "datatime_example": "2015-06-24T12:50:35.556000000+01:00",
-            "point_3d_example": [
-                3.0,
-                0.0,
-                3.4
-            ],
-            "localdatetime_example": "2015-07-04T19:32:24.000000000",
-            "duration": {
-                "months": 0,
-                "days": 0,
-                "seconds": 0,
-                "nanoseconds": 1
-            },
-            "date_example": "1999-01-01",
-            "point_2d_example": [
-                3.0,
-                0.0
-            ],
-            "point_geo_3d_example": [
-                56.0,
-                11.0,
-                1000.0
-            ],
-            "name": "Tom Hanks",
-            "localtime_example": "12:50:35.556000000",
-            "point_geo_2d_example": [
-                56.0,
-                12.0
-            ],
-            "array_example": [
-                true
-            ],
-            "float_example": 0.334,
-            "time_example": "21:40:32.142000000+01:00"
-        },
-        "node_props_types": {
-            "bool_example": "bool",
-            "born": "int",
-            "int_example": "int",
-            "datatime_example": "datetime",
-            "point_3d_example": "3d-cartesian-point",
-            "localdatetime_example": "datetime",
-            "duration": "duration",
-            "date_example": "date",
-            "point_2d_example": "2d-cartesian-point",
-            "point_geo_3d_example": "3d-WGS-84-point",
-            "name": "str",
-            "localtime_example": "time",
-            "point_geo_2d_example": "2d-WGS-84-point",
-            "array_example": [
-                "bool"
-            ],
-            "float_example": "float",
-            "time_example": "time"
-        }
+    "node_id": 72,
+    "node_labels": "Person:XX",
+    "node_props": {
+        "bool_example": false,
+        "born": 1956,
+        "int_example": 1,
+        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "date('1999-01-01')",
+        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
+        "duration_example": "duration('P5M1DT12H')",
+        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "name": "Tom Hanks",
+        "localtime_example": "time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "float_example": 0.334,
+        "time_example": "time('21:40:32.142000000+01:00')",
+        "array_example": [
+            true,
+            false
+        ]
     }
+}
 ```
-
-The properties saved for relationships are very similar.
-An example relationship is stored as:
+Note that the `odd_prop` was originally stored as a string in the database.
+The `$` denotes that the string is a literal string.
+Relationships are stored in a very similar fashion.
+Example showing a Relationship with complex property values.
 
 ```json
 {
-        "start_node_id": 71,
-        "start_node_labels": [
-            "Person"
+    "rel_id": 224,
+    "start_node_id": 71,
+    "end_node_id": 150,
+    "rel_type": "ACTED_IN",
+    "rel_props": {
+        "bool_example": false,
+        "roles": [
+            "Chuck Noland"
         ],
-        "end_node_id": 85,
-        "end_node_labels": [
-            "Movie"
-        ],
-        "rel_type": "DIRECTED",
-        "rel_props": {
-            "bool_example": false,
-            "int_example": 1,
-            "datatime_example": "2015-06-24T12:50:35.556000000+01:00",
-            "point_3d_example": [
-                3.0,
-                0.0,
-                3.4
-            ],
-            "localdatetime_example": "2015-07-04T19:32:24.000000000",
-            "duration": {
-                "months": 0,
-                "days": 0,
-                "seconds": 0,
-                "nanoseconds": 1
-            },
-            "date_example": "1999-01-01",
-            "point_2d_example": [
-                3.0,
-                0.0
-            ],
-            "point_geo_3d_example": [
-                56.0,
-                11.0,
-                1000.0
-            ],
-            "localtime_example": "12:50:35.556000000+00:00",
-            "point_geo_2d_example": [
-                56.0,
-                12.0
-            ],
-            "float_example": 0.334,
-            "time_example": "21:40:32.142000000+01:00"
-        },
-        "rel_props_types": {
-            "bool_example": "bool",
-            "int_example": "int",
-            "datatime_example": "datetime",
-            "point_3d_example": "3d-cartesian-point",
-            "localdatetime_example": "datetime",
-            "duration": "duration",
-            "date_example": "date",
-            "point_2d_example": "2d-cartesian-point",
-            "point_geo_3d_example": "3d-WGS-84-point",
-            "localtime_example": "time",
-            "point_geo_2d_example": "2d-WGS-84-point",
-            "float_example": "float",
-            "time_example": "time"
-        }
+        "born": 1956,
+        "int_example": 1,
+        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "date('1999-01-01')",
+        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
+        "duration_example": "duration('P5M1DT12H')",
+        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "name": "Tom Hanks",
+        "localtime_example": "time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "float_example": 0.334,
+        "time_example": "time('21:40:32.142000000+01:00')",
+        "array_example": [
+            true,
+            false
+        ]
     }
+}
 ```
 
 The full list of supported property types to be extracted are:
 Integer, Float, String, Boolean, Point, Date, Time, LocalTime, DateTime, LocalDateTime, and Duration.
 As well as arrays, but arrays are treated as second class properties and have many restrictions in Neo4j.
 
-The type are saved as:
-int, float, str, bool, date, time, datetime, duration, 
-2d-cartesian-point, 3d-cartesian-point, 2d-WGS-84-point, and 3d-WGS-84-point.
-
-While Temporal values can be saved, the python-neo4j driver makes no distinction between
+Temporal values can be saved, but the python-neo4j driver makes no distinction between
 - Time and LocalTime
 - DateTime and LocalDateTime
 
-The only difference with the prefix local being that when creating the property,
-Neo4j will first convert local times to global times.
+The only difference with the time zone cannot be specified in local times.
 
 The following point SRID types are supported and saved as:
 - 7203 : 2d-cartesian-point
@@ -276,24 +205,16 @@ All the data is extracted to the tree structure:
   - relationships_<index>.json.gz
   - ...
 - compressed.json -> bool weather or not data is compresses
-- constraints.json -> List of constraints
-- constraints_names.json -> Names of constraints in Neo4j db
 - db_id.json -> ID of db
 - node_labels.json -> List of all Node labels
 - property_keys.json -> List of all property keys
 - rel_types.json -> List of all Relationship types
+- uniqueness_constraints.json -> List of uniqueness constraints in Neo4j db
 - unique_prop_key.json -> Some unique property that does not exist in db
 
 # Notes About Importing Data into Neo4j
 
-This may not be the best tool to back up data if speed is a concern.
-This tool is significantly slower than the built-in Dump tool Neo4j provides.
-The selling point of this script is also its biggest downfall, all calls to Neo4j are done with Cypher.
-This adds a significant amount of overhead that can be avoided if the direct files of a graph can be accessed.
-Also, while the raw data is machine-readable, 
-it still needs to be manipulated by the end user to insert it into other databases.
-
-Another note, an internal ID property is made when creating Nodes and properties. 
+An internal ID property is made when creating Nodes and properties. 
 Since this script does not read the underlying file in the Neo4j database, 
 some unique identifier is needed to MATCH nodes on.
 Forcing the user to pass a map of unique keys for each Node is not reasonable.

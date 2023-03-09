@@ -4,8 +4,8 @@ from json import dumps, loads
 from gzip import open as gzip_open
 
 
-def to_json(file_path, data, compress=False):
-    json_string = dumps(data, default=str, indent=4)
+def to_json(file_path, data, compress=False, indent=4):
+    json_string = dumps(data, default=str, indent=indent)
 
     if compress:
         with gzip_open(f"{file_path}.gz", 'wb') as f:

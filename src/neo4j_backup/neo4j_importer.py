@@ -15,7 +15,6 @@ class Importer:
         """
         This purpose of this class is to import the information in the project_dir output from the Extractor class.
 
-
         :param project_dir: The directory where to back up Neo4j Graph
         :param driver: Neo4j driver
         :param input_yes: bool, determines weather to just type in "y" for all input options
@@ -31,7 +30,7 @@ class Importer:
         self.unique_prop_key: str = from_json(self.project_dir / f"unique_prop_key.json")
         self.labels: list = from_json(self.project_dir / 'node_labels.json')
         self.relationship_types: list = from_json(self.project_dir / 'rel_types.json')
-        self.constraints: list = from_json(self.project_dir / 'constraints.json')
+        self.uniqueness_constraints: list = from_json(self.project_dir / 'uniqueness_constraints.json')
 
         self.relationships_files = []
         for file_path in self.data_dir.iterdir():
@@ -55,17 +54,19 @@ class Importer:
 
         self._test_connection()  # Make sure the driver can connect to Neo4j database
         self._verify_is_new_db()  # Make sure database is empty and not the original database
-        self._apply_constraints()  # Apply the dummy constraints
+
+        self._apply_temp_constraints()  # Apply the dummy constraints
 
         # Grab all the labels used for Nodes
-        for file_path in self.nodes_files:
+        for file_path in tqdm(self.nodes_files, desc="Inserting Nodes"):
             self._import_nodes_file(file_path)
 
         # Grab all the relationship types used by relationships
-        for file_path in self.relationships_files:
+        for file_path in tqdm(self.relationships_files, desc="Inserting Relationships"):
             self._import_relationships_file(file_path)
 
-        # Remove dummy constraints and properties
+        # Remove dummy constraints and properties, add real constraints, fix temporal/spatial values
+        self._fix_node_temporal_spatial_values()
         self._cleanup()
 
     def _test_connection(self):
@@ -96,83 +97,37 @@ class Importer:
                 if user_input == "y":
                     raise UserWarning("Aborted, database referenced is not empty")
 
-    def _apply_constraints(self):
+    @staticmethod
+    def _apply_constraint(session, constraint):
+        try:
+            constraint_str = f"""
+            CREATE CONSTRAINT {constraint['constraint_name']} 
+            FOR (n:{constraint['node_label']}) 
+            REQUIRE n.{constraint['node_prop']} IS UNIQUE
+            """
+            session.run(constraint_str)
+            return
+        except:
+            constraint_str = f"""
+            CREATE CONSTRAINT {constraint['constraint_name']} 
+            ON (n:{constraint['node_label']}) 
+            ASSERT n.{constraint['node_prop']} IS UNIQUE
+            """
+            session.run(constraint_str)
+
+    def _apply_temp_constraints(self):
 
         with self.driver.session(database=self.database) as session:
 
             # Create dummy constraints on each node label, helps speed up inserting significantly
             for node_label in tqdm(self.labels, desc='Applying Temporary Constraints'):
-                constraint = f"CREATE CONSTRAINT {node_label}_{self.unique_prop_key} IF NOT EXISTS ON " \
-                             f"(m:{node_label}) ASSERT (m.{self.unique_prop_key}) IS UNIQUE"
-                session.run(constraint)
-
-    @staticmethod
-    def _reformat_props(props, prop_types):
-
-        # Re-format property in a way that Neo4j understands
-        def _reformat_prop(prop_type, prop):
-            if prop_type == "int" or prop_type == "bool" or prop_type == "float":
-                reformatted_prop = prop
-            elif prop_type == "str":
-                reformatted_prop = prop.replace('"', '\\"')
-                reformatted_prop = reformatted_prop.replace("'", "\\'")
-                reformatted_prop = f'"{reformatted_prop}"'
-            elif prop_type == "2d-cartesian-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'cartesian'{'}'})"
-            elif prop_type == "3d-cartesian-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'cartesian-3d'{'}'})"
-            elif prop_type == "2d-WGS-84-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'wgs-84'{'}'})"
-            elif prop_type == "3d-WGS-84-point":
-                reformatted_prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'wgs-84-3d'{'}'})"
-            elif prop_type == "date":
-                reformatted_prop = f'date("{prop}")'
-            elif prop_type == "time":
-                reformatted_prop = f'time("{prop}")'
-            elif prop_type == "datetime":
-                reformatted_prop = f'datetime("{prop}")'
-            elif prop_type == "duration":
-                duration_str = ""
-                for time_key, time_value in prop.items():
-                    duration_str += f"{time_key}: {time_value},"
-                duration_str = duration_str.split(",")[:-1]
-                duration_str = ", ".join(duration_str)
-                duration_str = "{" + duration_str + "}"
-                reformatted_prop = f'duration({duration_str})'
-            else:
-                raise ValueError(f"Property type {prop_type} is not supported")
-            return reformatted_prop
-
-        # Goal is to have a final dict of {prop_key: prop_value_as_str}
-        # Where prop_value_as_str is the original prop_value formatted in a way Neo4j understands
-        new_props = {}
-        for prop_key, prop_type in prop_types.items():
-            prop = props[prop_key]
-
-            # Treat property that are list like normal if they are points
-            point_types = ["2d-cartesian-point", "3d-cartesian-point", "2d-WGS-84-point", "3d-WGS-84-point"]
-            if prop_type in point_types:
-                new_props[prop_key] = _reformat_prop(prop_type, prop)
-
-            # Treat each property inside an array separately
-            elif isinstance(prop, list):
-                array_props = []
-                for i, sub_prop in enumerate(prop):
-                    sub_prop_type = prop_type[i]
-                    array_props.append(_reformat_prop(sub_prop_type, sub_prop))
-                array_str = ""
-                for array_prop in array_props:
-                    array_str += f"{array_prop}, "
-                array_str = array_str.split(",")[:-1]
-                array_str = ", ".join(array_str)
-                array_str = "[" + array_str + "]"
-                new_props[prop_key] = array_str
-
-            # Treat all other properties as normal
-            else:
-                new_props[prop_key] = _reformat_prop(prop_type, prop)
-
-        return new_props
+                if ":" not in node_label:
+                    constraint = dict(
+                        node_label=node_label,
+                        node_prop=self.unique_prop_key,
+                        constraint_name=f"{node_label}_{self.unique_prop_key}",
+                    )
+                    self._apply_constraint(session, constraint)
 
     def _import_nodes_file(self, file_path):
 
@@ -185,30 +140,23 @@ class Importer:
 
         with self.driver.session(database=self.database) as session:
 
-            # For each node in the given file
-            for node in tqdm(from_json(file_path, compressed=self.compressed),
-                             desc=f"Inserting nodes from {file_path.stem}"):
+            data = from_json(file_path, compressed=self.compressed)
 
-                node_id = node["node_id"]
-                node_labels = node["node_labels"]
-                node_labels = ":".join(node_labels)
+            for node_labels in self.labels:
 
-                # Gather properties
-                node_props = node["node_props"]
-                node_prop_types = node["node_props_types"]
-                node_props = self._reformat_props(node_props, node_prop_types)
+                filtered_data = []
+                for row in data:
+                    if row["node_labels"] == node_labels:
+                        filtered_data.append(row)
 
-                # Run query, inserting one node at a time
                 query = f"""
+                    UNWIND $rows as row
                     CREATE (a:{node_labels})
-                    SET a.{self.unique_prop_key} = {node_id}\n
+                    SET a.{self.unique_prop_key} = row["node_id"]
+                    SET a += row["node_props"]
                 """
 
-                # Add all properties associated with a node
-                for prop_key, prop_value in node_props.items():
-                    query += f"SET a.{prop_key} = {prop_value}\n"
-
-                session.run(query, parameters={"node_props": node_props})
+                session.run(query, parameters={"rows": filtered_data})
 
     def _import_relationships_file(self, file_path):
 
@@ -221,34 +169,73 @@ class Importer:
 
         with self.driver.session(database=self.database) as session:
 
-            for relationship in tqdm(from_json(file_path, compressed=self.compressed),
-                                     desc=f"Inserting relationships from {file_path.stem}"):
+            data = from_json(file_path, compressed=self.compressed)
 
-                start_node_id = relationship["start_node_id"]
-                start_node_labels = relationship["start_node_labels"]
-                start_node_labels = ":".join(start_node_labels)
+            for relationship in self.relationship_types:
 
-                end_node_id = relationship["end_node_id"]
-                end_node_labels = relationship["end_node_labels"]
-                end_node_labels = ":".join(end_node_labels)
-
-                rel_type = relationship["rel_type"]
-                rel_props = relationship["rel_props"]
-                rel_props_types = relationship["rel_props_types"]
-                rel_props = self._reformat_props(rel_props, rel_props_types)
+                filtered_data = []
+                for row in data:
+                    if row["rel_type"] == relationship:
+                        filtered_data.append(row)
 
                 query = f"""
-                    MATCH (start_node:{start_node_labels})
-                        WHERE start_node.{self.unique_prop_key} = {start_node_id}
-                    MATCH (end_node:{end_node_labels})
-                        WHERE end_node.{self.unique_prop_key} = {end_node_id}
-                    CREATE (start_node)-[r:{rel_type}]->(end_node)\n
-                    """
+                UNWIND $rows as row
+                MATCH (start_node)
+                    WHERE start_node.{self.unique_prop_key} = row["start_node_id"]
+                MATCH (end_node)
+                    WHERE end_node.{self.unique_prop_key} = row["end_node_id"]
+                CREATE (start_node)-[r:{relationship}]->(end_node)
+                SET r.{self.unique_prop_key} = row["rel_id"]
+                SET r += row["rel_props"]
+                """
 
-                for prop_key, prop_value in rel_props.items():
-                    query += f"SET r.{prop_key} = {prop_value}\n"
+                session.run(query, parameters={"rows": filtered_data})
 
-                session.run(query, parameters={"rel_props": rel_props})
+    def _fix_node_temporal_spatial_values(self):
+
+        literals = ["point(", "date(", "time(", "datetime(", "duration("]
+
+        with self.driver.session(database=self.database) as session:
+
+            # Fix nodes
+            query = f"""
+            MATCH (node)
+            RETURN (node)
+            """
+
+            # Gather number of nodes
+            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
+            results = session.run(query)
+
+            # Going through all properties in all nodes
+            for record in tqdm(results, total=number_of_nodes, desc="Extracting Nodes"):
+                node = record['node']
+                node_props = dict(node)
+                for prop_key, prop_value in node_props.items():
+                    if isinstance(prop_value, str):
+                        for literal in literals:
+                            if prop_value[:len(literal)] == literal:
+
+                                # If property is a spatial or temporal value, update the property
+                                query = f"""
+                                MATCH (n)
+                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
+                                SET n.{prop_key} = {prop_value}
+                                RETURN n
+                                """
+                                session.run(query)
+
+                            elif prop_value[:len(literal) + 1] == "$" + literal:
+
+                                # If property is a literal string with a spartial/temporal piece
+                                # Remove the literal identifier
+                                prop_value = prop_value[1:]
+                                query = f"""
+                                MATCH (n)
+                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
+                                SET n.{prop_key} = "{prop_value}"
+                                """
+                                session.run(query)
 
     def _cleanup(self):
 
@@ -256,20 +243,26 @@ class Importer:
 
             # Drop dummy unique property key used for merging nodes
             query = f"""
-                MATCH (a) WHERE EXISTS(a.{self.unique_prop_key})
-                REMOVE a.{self.unique_prop_key}
+            MATCH (a) WHERE a.{self.unique_prop_key} IS NOT NULL
+            REMOVE a.{self.unique_prop_key}
+            """
+            session.run(query)
+
+            # Drop dummy unique property key used for match relationships in cleanup
+            query = f"""
+            MATCH ()-[r]-() WHERE r.{self.unique_prop_key} IS NOT NULL
+            REMOVE r.{self.unique_prop_key}
             """
             session.run(query)
 
             # Drop dummy constraints used to speed up merging nodes
             for node_labels in tqdm(self.labels, desc='Removing Temporary Constraints'):
-                node_labels = node_labels.split(":")
-                for node_label in node_labels:
-                    constraint = f" DROP CONSTRAINT {node_label}_{self.unique_prop_key} IF EXISTS"
+                if ":" not in node_labels:
+                    constraint = f"DROP CONSTRAINT {node_labels}_{self.unique_prop_key}"
                     session.run(constraint)
 
             # Apply real constraints
-            for constraint in tqdm(self.constraints, desc='Applying Actual Constraints', total=len(self.constraints)):
-                constraint = constraint.split("CONSTRAINT")[1]
-                constraint = "CREATE CONSTRAINT IF NOT EXISTS" + constraint
-                session.run(constraint)
+            if self.uniqueness_constraints:
+                for constraint in tqdm(self.uniqueness_constraints, desc='Applying Actual Constraints',
+                                       total=len(self.uniqueness_constraints)):
+                    self._apply_constraint(session, constraint)
