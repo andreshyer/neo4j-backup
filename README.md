@@ -40,7 +40,7 @@ that your user has read and show constraints privileges for downloading data, an
 
 # Supported Neo4j Database Versions
 
-`Neo4j >= 4.3`
+`Neo4j >= 4.1`
 
 # Usage
 
