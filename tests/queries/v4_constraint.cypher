@@ -1,0 +1,3 @@
+CREATE CONSTRAINT
+ON (n:Person)
+ASSERT n.node_id IS UNIQUE
