@@ -3,6 +3,7 @@ from pathlib import Path
 from sys import getsizeof
 from os.path import exists
 from os import mkdir, getcwd
+from time import sleep
 
 from tqdm import tqdm
 from neo4j import GraphDatabase
@@ -187,29 +188,25 @@ class Extractor:
                 point_srid = prop.srid
                 prop = list(prop)
                 if point_srid == 7203:
-                    prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'cartesian'{'}'})"
+                    prop = f"$point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'cartesian'{'}'})"
                 elif point_srid == 9157:
-                    prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'cartesian-3d'{'}'})"
+                    prop = f"$point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'cartesian-3d'{'}'})"
                 elif point_srid == 4326:
-                    prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'wgs-84'{'}'})"
+                    prop = f"$point({'{'}x: {prop[0]}, y: {prop[1]}, crs: 'wgs-84'{'}'})"
                 elif point_srid == 4979:
-                    prop = f"point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'wgs-84-3d'{'}'})"
+                    prop = f"$point({'{'}x: {prop[0]}, y: {prop[1]}, z: {prop[2]}, crs: 'wgs-84-3d'{'}'})"
                 else:
                     raise ValueError(f"Point of srid {point_srid} is not supported")
 
             # Treat temporal values seperately
             elif isinstance(prop, Date):
-                prop = f"date('{prop.iso_format()}')"
+                prop = f"$date('{prop.iso_format()}')"
             elif isinstance(prop, Time):
-                prop = f"time('{prop.iso_format()}')"
+                prop = f"$time('{prop.iso_format()}')"
             elif isinstance(prop, DateTime):
-                prop = f"datetime('{prop.iso_format()}')"
+                prop = f"$datetime('{prop.iso_format()}')"
             elif isinstance(prop, Duration):
-                prop = f"duration('{prop.iso_format()}')"
-            elif isinstance(prop, str):
-                literals = ["point(", "date(", "time(", "datetime(", "duration("]
-                for literal in literals:
-                    prop = prop.replace(literal, "$" + literal)
+                prop = f"$duration('{prop.iso_format()}')"
 
             # Otherwise, return the prop
             return prop
@@ -266,7 +263,7 @@ class Extractor:
 
             size_in_ram = getsizeof(self.working_extracted_nodes)
             if size_in_ram > self.json_file_size:
-                to_json(self.data_dir / f"nodes_{self.node_counter}.json", self.extracted_data, compress=self.compress,
+                to_json(self.data_dir / f"nodes_{self.node_counter}.json", self.working_extracted_nodes, compress=self.compress,
                         indent=self.indent_size)
                 self.working_extracted_nodes = []
 
@@ -297,19 +294,19 @@ class Extractor:
     def _pull_relationships(self):
 
         query = """
-        MATCH (start_node)-[rel]->(end_node)
-        RETURN start_node, end_node, rel
+        MATCH (sn)-[r]->(en)
+        RETURN sn, en, r
         """
 
         with self.driver.session(database=self.database) as session:
-            number_of_relationships = session.run("MATCH p=(start_node)-[rel]->(end_node) RETURN COUNT(p)").value()[0]
+            number_of_relationships = session.run("MATCH p=(sn)-[r]->(en) RETURN COUNT(p)").value()[0]
             results = session.run(query)
 
             for record in tqdm(results, total=number_of_relationships,
                                desc="Extracting Relationships"):
-                start_node = record['start_node']
-                end_node = record['end_node']
-                rel = record["rel"]
+                start_node = record['sn']
+                end_node = record['en']
+                rel = record["r"]
 
                 self._update_node(start_node)
                 self._update_node(end_node)
@@ -318,17 +315,17 @@ class Extractor:
     def _pull_lonely_nodes(self):
 
         query = """
-        MATCH (node)
-        WHERE NOT (node)-[]-()
-        RETURN node
+        MATCH (n)
+        WHERE NOT (n)-[]-()
+        RETURN n
         """
 
         with self.driver.session(database=self.database) as session:
-            number_of_nodes = session.run(f"MATCH (node) WHERE NOT (node)-[]-() RETURN COUNT(node)").value()[0]
+            number_of_nodes = session.run(f"MATCH (n) WHERE NOT (n)-[]-() RETURN COUNT(n)").value()[0]
             results = session.run(query)
             for record in tqdm(results, total=number_of_nodes, desc="Extracting Lonely Nodes"):
                 # Base node object
-                node = record['node']
+                node = record['n']
                 self._update_node(node)
 
     def _calc_unique_prop_key(self):

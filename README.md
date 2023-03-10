@@ -40,7 +40,7 @@ that your user has read and show constraints privileges for downloading data, an
 
 # Supported Neo4j Database Versions
 
-`Neo4j >= 4.x`
+`Neo4j >= 4.3`
 
 # Usage
 
@@ -119,19 +119,19 @@ This example shows saved data from a Node with complex data types.
         "bool_example": false,
         "born": 1956,
         "int_example": 1,
-        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
-        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
-        "date_example": "date('1999-01-01')",
-        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
-        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
-        "point_geo_3d_example": "point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
-        "duration_example": "duration('P5M1DT12H')",
-        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "point_3d_example": "$point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "$datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "$date('1999-01-01')",
+        "point_2d_example": "$point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "$datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "$point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
+        "duration_example": "$duration('P5M1DT12H')",
+        "odd_prop": "time('21:40:32.142000000+01:00')",
         "name": "Tom Hanks",
-        "localtime_example": "time('12:50:35.556000000+00:00')",
-        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "localtime_example": "$time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "$point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
         "float_example": 0.334,
-        "time_example": "time('21:40:32.142000000+01:00')",
+        "time_example": "$time('21:40:32.142000000+01:00')",
         "array_example": [
             true,
             false
@@ -140,7 +140,7 @@ This example shows saved data from a Node with complex data types.
 }
 ```
 Note that the `odd_prop` was originally stored as a string in the database.
-The `$` denotes that the string is a literal string.
+The `$` denotes that the string is a string that need further processing.
 Relationships are stored in a very similar fashion.
 Example showing a Relationship with complex property values.
 
@@ -157,19 +157,19 @@ Example showing a Relationship with complex property values.
         ],
         "born": 1956,
         "int_example": 1,
-        "point_3d_example": "point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
-        "localdatetime_example": "datetime('2015-07-04T19:32:24.000000000+00:00')",
-        "date_example": "date('1999-01-01')",
-        "point_2d_example": "point({x: 3.0, y: 0.0, crs: 'cartesian'})",
-        "datetime_example": "datetime('2015-06-24T12:50:35.556000000+01:00')",
-        "point_geo_3d_example": "point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
-        "duration_example": "duration('P5M1DT12H')",
-        "odd_prop": "$time('21:40:32.142000000+01:00')",
+        "point_3d_example": "$point({x: 3.0, y: 0.0, z: 2.0, crs: 'cartesian-3d'})",
+        "localdatetime_example": "$datetime('2015-07-04T19:32:24.000000000+00:00')",
+        "date_example": "$date('1999-01-01')",
+        "point_2d_example": "$point({x: 3.0, y: 0.0, crs: 'cartesian'})",
+        "datetime_example": "$datetime('2015-06-24T12:50:35.556000000+01:00')",
+        "point_geo_3d_example": "$point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
+        "duration_example": "$duration('P5M1DT12H')",
+        "odd_prop": "time('21:40:32.142000000+01:00')",
         "name": "Tom Hanks",
-        "localtime_example": "time('12:50:35.556000000+00:00')",
-        "point_geo_2d_example": "point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
+        "localtime_example": "$time('12:50:35.556000000+00:00')",
+        "point_geo_2d_example": "$point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
         "float_example": 0.334,
-        "time_example": "time('21:40:32.142000000+01:00')",
+        "time_example": "$time('21:40:32.142000000+01:00')",
         "array_example": [
             true,
             false

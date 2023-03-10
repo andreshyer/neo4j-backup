@@ -193,7 +193,7 @@ class Importer:
 
     def _fix_node_temporal_spatial_values(self):
 
-        literals = ["point(", "date(", "time(", "datetime(", "duration("]
+        literals = ["$point(", "$date(", "$time(", "$datetime(", "$duration("]
 
         with self.driver.session(database=self.database) as session:
 
@@ -208,32 +208,18 @@ class Importer:
             results = session.run(query)
 
             # Going through all properties in all nodes
-            for record in tqdm(results, total=number_of_nodes, desc="Extracting Nodes"):
+            for record in tqdm(results, total=number_of_nodes, desc="Fixing Temporal/Point Node Properties"):
                 node = record['node']
                 node_props = dict(node)
                 for prop_key, prop_value in node_props.items():
                     if isinstance(prop_value, str):
                         for literal in literals:
                             if prop_value[:len(literal)] == literal:
-
                                 # If property is a spatial or temporal value, update the property
                                 query = f"""
                                 MATCH (n)
                                 WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
-                                SET n.{prop_key} = {prop_value}
-                                RETURN n
-                                """
-                                session.run(query)
-
-                            elif prop_value[:len(literal) + 1] == "$" + literal:
-
-                                # If property is a literal string with a spartial/temporal piece
-                                # Remove the literal identifier
-                                prop_value = prop_value[1:]
-                                query = f"""
-                                MATCH (n)
-                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
-                                SET n.{prop_key} = "{prop_value}"
+                                SET n.{prop_key} = {prop_value[1:]}
                                 """
                                 session.run(query)
 
