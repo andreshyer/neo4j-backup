@@ -81,7 +81,8 @@ if __name__ == "__main__":
     indent_size = 4  # Indent of json files
     json_file_size: int = int("0xFFFF", 16)  # Size of data in memory before dumping
     extractor = Extractor(project_dir=project_dir, driver=driver, database=database,
-                          input_yes=input_yes, compress=compress, indent_size=indent_size)
+                          input_yes=input_yes, compress=compress, indent_size=indent_size,
+                          pull_uniqueness_constraints=True)
     extractor.extract_data()
 ```
 
