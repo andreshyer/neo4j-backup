@@ -9,7 +9,7 @@ This repo is not intended to replace the native Neo4j backup Dump files,
 but rather to be used in instances where a Dump file is not an option.
 Such as moving data from Neo4j to a different type of database.
 
-Also, this repo aims to be as simplistic as possible with two main purposes. 
+Also, this repository aims to be as simple as possible with two main purposes. 
 To download a Neo4j graph without using a Dump file and to be able to upload that data to a different Neo4j graph.
 Only simple Cypher statements are used to import and extract data from Neo4j.
 The data is downloaded as json files.
@@ -54,7 +54,7 @@ you can set `input_yes=True` to enter yes to all input questions.
 # Constraints
 
 The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
-As of right now, this is the only currently supported type of constraint in this codebase.
+Currently, this is the only supported type of constraint in this codebase.
 If you need to transfer the extracted data to an Enterprise edition database,
 the other constraints can be added after importing the data
 (assuming the data is structured in compliance with such constraints).
@@ -128,6 +128,7 @@ This example shows saved data from a Node with complex data types.
         "point_geo_3d_example": "$point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
         "duration_example": "$duration('P5M1DT12H')",
         "odd_prop": "time('21:40:32.142000000+01:00')",
+        "example_hash_prop": "e425c2703cf3d6d063f3de705c8f55a9be5e6fdee62bba4d95ce209352da2833",
         "name": "Tom Hanks",
         "localtime_example": "$time('12:50:35.556000000+00:00')",
         "point_geo_2d_example": "$point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
@@ -137,11 +138,23 @@ This example shows saved data from a Node with complex data types.
             true,
             false
         ]
+        },
+    "hash_props": {
+        "example_hash_prop": "$time('21:40:32.142000000+01:00')"
     }
 }
 ```
 Note that the `odd_prop` was originally stored as a string in the database.
-The `$` denotes that the string is a string that need further processing.
+Any string stored in the backup that starts with ["$point(", "$date(", "$time(", "$datetime(", "$duration("] 
+represents a temporal or spatial value, and is stored as a literal value.
+Any string that starts with a literal value is assumed to always be either a temporal or spatial value. 
+
+If there happens to be a string that exists in the database that starts with a literal value string,
+a sha256 has is generated from the property string and stored in `hash_props`.
+For most neo4j databases, `hash_props` will be an empty dict for all nodes and relationships.
+But, this step is taken to be sure the database backups cannot be intentionally or accidentally broken by 
+oddly formatted strings.
+
 Relationships are stored in a very similar fashion.
 Example showing a Relationship with complex property values.
 
@@ -166,6 +179,7 @@ Example showing a Relationship with complex property values.
         "point_geo_3d_example": "$point({x: 56.0, y: 12.0, z: 2, crs: 'wgs-84-3d'})",
         "duration_example": "$duration('P5M1DT12H')",
         "odd_prop": "time('21:40:32.142000000+01:00')",
+        "example_hash_prop": "e425c2703cf3d6d063f3de705c8f55a9be5e6fdee62bba4d95ce209352da2833",
         "name": "Tom Hanks",
         "localtime_example": "$time('12:50:35.556000000+00:00')",
         "point_geo_2d_example": "$point({x: 56.0, y: 12.0, crs: 'wgs-84'})",
@@ -175,6 +189,9 @@ Example showing a Relationship with complex property values.
             true,
             false
         ]
+    },
+    "hash_props": {
+        "example_hash_prop": "$time('21:40:32.142000000+01:00')"
     }
 }
 ```
@@ -205,7 +222,7 @@ All the data is extracted to the tree structure:
   - relationships_<index>.json.gz
   - relationships_<index>.json.gz
   - ...
-- compressed.json -> bool weather or not data is compresses
+- compressed.json -> A boolean indicating whether data is compressed or not
 - db_id.json -> ID of db
 - node_labels.json -> List of all Node labels
 - property_keys.json -> List of all property keys

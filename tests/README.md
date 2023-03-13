@@ -24,3 +24,9 @@ If docker has been installed correctly, your username should be listed.
 Afterward, all that should be left is to run `test.py`.
 If `test.py` runs correctly, than the code is currently working.
 Otherwise, this script can help act as a guide as to what is breaking.
+
+## Tested Tags
+
+These are the list of different tags that have been directly tested
+
+["4.1.0-community", "4.2.0-community", "4.3.0-community", "4.4.0-community", "5-community", "5.1.0-community", "5.2.0-community", "5.3.0-community", "5.4.0-community", "5.5.0-community", "latest"]

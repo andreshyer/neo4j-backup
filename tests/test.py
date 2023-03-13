@@ -1,5 +1,5 @@
 from pathlib import Path
-from json import load
+from json import load, dumps
 from time import sleep
 from shutil import rmtree
 from os import mkdir
@@ -187,9 +187,14 @@ def _pull_dicts(dump):
 def _test_equiv(list1, list2):
     # Verify that list1 is equal to list2, even if the items are unsorted
     assert len(list1) == len(list2)
-    sorted_list1 = sorted(list1, key=lambda d: str(sorted(d.items())))
-    sorted_list2 = sorted(list2, key=lambda d: str(sorted(d.items())))
+
+    sort_key = lambda x: tuple(x[k] for k in list(list1[0].keys()))
+
+    sorted_list1 = sorted(list1, key=sort_key)
+    sorted_list2 = sorted(list2, key=sort_key)
     for dict1, dict2 in zip(sorted_list1, sorted_list2):
+        dict1 = dumps(dict1, sort_keys=True)
+        dict2 = dumps(dict2, sort_keys=True)
         assert dict1 == dict2
 
 
