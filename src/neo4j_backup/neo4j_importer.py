@@ -64,9 +64,18 @@ class Importer:
         # Grab all the relationship types used by relationships
         for file_path in tqdm(self.relationships_files, desc="Inserting Relationships"):
             self._import_relationships_file(file_path)
+            self._unhash_rel_file(file_path)
 
         # Remove dummy constraints and properties, add real constraints, fix temporal/spatial values
         self._fix_node_temporal_spatial_values()
+        self._fix_rel_temporal_spatial_values()
+
+        # Fix oddly formatted props that had to be hashed
+        for file_path in tqdm(self.nodes_files, desc="Inserting Nodes"):
+            self._unhash_node_file(file_path)
+        for file_path in tqdm(self.relationships_files, desc="Inserting Relationships"):
+            self._unhash_rel_file(file_path)
+
         self._cleanup()
 
     def _test_connection(self):
@@ -199,29 +208,109 @@ class Importer:
 
             # Fix nodes
             query = f"""
-            MATCH (node)
-            RETURN (node)
+            MATCH (n)
+            RETURN n
             """
 
             # Gather number of nodes
-            number_of_nodes = session.run("MATCH (node) RETURN COUNT(node)").value()[0]
+            number_of_nodes = session.run("MATCH (n) RETURN COUNT(n)").value()[0]
             results = session.run(query)
 
             # Going through all properties in all nodes
             for record in tqdm(results, total=number_of_nodes, desc="Fixing Temporal/Point Node Properties"):
-                node = record['node']
+                node = record['n']
                 node_props = dict(node)
+
+                # Fast update node properties
                 for prop_key, prop_value in node_props.items():
                     if isinstance(prop_value, str):
-                        for literal in literals:
-                            if prop_value[:len(literal)] == literal:
-                                # If property is a spatial or temporal value, update the property
-                                query = f"""
-                                MATCH (n)
-                                WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
-                                SET n.{prop_key} = {prop_value[1:]}
-                                """
-                                session.run(query)
+                        if any(prop_value.startswith(s) for s in literals):
+                            # If property is a spatial or temporal value, update the property
+                            query = f"""
+                            MATCH (n)
+                            WHERE n.{self.unique_prop_key} = {node_props[self.unique_prop_key]}
+                            SET n.{prop_key} = {prop_value[1:]}
+                            """
+                            session.run(query)
+
+    def _fix_rel_temporal_spatial_values(self):
+
+        literals = ["$point(", "$date(", "$time(", "$datetime(", "$duration("]
+
+        with self.driver.session(database=self.database) as session:
+
+            # Fix nodes
+            query = f"""
+            MATCH (ns)-[r]-(en)
+            RETURN ns, r, en
+            """
+
+            # Gather number of nodes
+            number_of_rels = session.run("MATCH p=()-[r]-() RETURN COUNT(p)").value()[0]
+            results = session.run(query)
+
+            # Going through all properties in all nodes
+            for record in tqdm(results, total=number_of_rels, desc="Fixing Temporal/Point Relationship Properties"):
+                rel = record['r']
+                rel_props = dict(rel)
+
+                start_node = dict(record["ns"])
+                start_node = start_node[self.unique_prop_key]
+
+                end_node = dict(record["en"])
+                end_node = end_node[self.unique_prop_key]
+
+                # Fast update relationship properties
+                for rel_key, rel_value in rel_props.items():
+                    if isinstance(rel_value, str):
+                        if any(rel_value.startswith(s) for s in literals):
+                            # If property is a spatial or temporal value, update the property
+                            query = f"""
+                            MATCH (ns)-[r]-(en)
+
+                            WHERE ns.{self.unique_prop_key} = {start_node}
+                            AND en.{self.unique_prop_key} = {end_node}
+
+                            SET r.{rel_key} = {rel_value[1:]}
+                            """
+                            session.run(query)
+
+    def _unhash_node_file(self, file_path):
+         with self.driver.session(database=self.database) as session:
+
+            data = from_json(file_path, compressed=self.compressed)
+            for row in data:
+                if row["hash_props"]:
+                    for prop_key, prop_value in row["hash_props"].items():
+                        node_id = row["node_id"]
+
+                        query = f"""
+                        MATCH (n)
+                        WHERE n.{self.unique_prop_key} = {node_id}
+                        SET n.{prop_key} = "{prop_value}"
+                        """
+                        session.run(query)
+
+    def _unhash_rel_file(self, file_path):
+         with self.driver.session(database=self.database) as session:
+
+            data = from_json(file_path, compressed=self.compressed)
+            for row in data:
+                if row["hash_props"]:
+                    for prop_key, prop_value in row["hash_props"].items():
+
+                        start_node_id = row["start_node_id"]
+                        end_node_id = row["end_node_id"]
+
+                        query = f"""
+                        MATCH (ns)-[r]-(en)
+
+                        WHERE ns.{self.unique_prop_key} = {start_node_id}
+                        AND en.{self.unique_prop_key} = {end_node_id}
+
+                        SET r.{prop_key} = "{prop_value}"
+                        """
+                        session.run(query)
 
     def _cleanup(self):
 

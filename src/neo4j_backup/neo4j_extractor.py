@@ -3,7 +3,7 @@ from pathlib import Path
 from sys import getsizeof
 from os.path import exists
 from os import mkdir, getcwd
-from time import sleep
+from hashlib import sha256
 
 from tqdm import tqdm
 from neo4j import GraphDatabase
@@ -178,7 +178,20 @@ class Extractor:
                                 self.uniqueness_constraints_names.append(constraint_name)
 
     @staticmethod
-    def __parse_props_types(props):
+    def __hash_props(props):
+        literals = ["$point(", "$date(", "$time(", "$datetime(", "$duration("]
+
+        hash_props = {}
+        for prop_key, prop_value in props.items():
+            if isinstance(prop_value, str) and any(prop_value.startswith(s) for s in literals):
+                prop_hash = sha256(prop_value.encode('utf-8')).hexdigest()
+                hash_props[prop_key] = prop_value
+                props[prop_key] = prop_hash
+
+        return hash_props, props
+
+    @staticmethod
+    def __parse_props(props):
 
         # Custom Parser
         def __parse_prop(prop):
@@ -234,22 +247,23 @@ class Extractor:
         node_labels = sorted(node_labels, key=str.lower)
         node_labels = ":".join(node_labels)
         node_props = dict(node)
-        node_props = self.__parse_props_types(node_props)
         return node_id, node_labels, node_props
     
     def _update_node(self, node):
 
         # Updates the current working nodes
-
         node_id, node_labels, node_props = self.__parse_node__(node)
         
         # Only update if node does not already updated
         if node_id not in self.node_ids:
 
+            hash_props, node_props = self.__hash_props(node_props)
+            node_props = self.__parse_props(node_props)
+
             self.node_counter += 1
 
             row = {'node_id': node_id, 'node_labels': node_labels,
-                   'node_props': node_props}
+                   'node_props': node_props, 'hash_props': hash_props}
 
             self.working_extracted_nodes.append(row)
 
@@ -271,7 +285,8 @@ class Extractor:
         # Gather relationship
         rel_type = rel.type
         rel_props = dict(rel)
-        rel_props = self.__parse_props_types(rel_props)
+        hash_props, rel_props = self.__hash_props(rel_props)
+        rel_props = self.__parse_props(rel_props)
 
         self.property_keys.update(rel_props.keys())
         self.rel_types.add(rel_type)
@@ -280,7 +295,8 @@ class Extractor:
                 'start_node_id': start_node.id,
                 'end_node_id': end_node.id,
                 'rel_type': rel_type,
-                'rel_props': rel_props}
+                'rel_props': rel_props,
+                'hash_props': hash_props}
         self.working_extracted_rel.append(row)
 
         self.rel_counter += 1
