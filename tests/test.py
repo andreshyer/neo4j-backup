@@ -81,8 +81,10 @@ def test_core():
             modifiy_rel = f.read()
         with open(Path(__file__).parent / "queries/lonely_node.cypher", "r") as f:
             lonely_node = f.read()
-        with open(Path(__file__).parent / "queries/id_as_prop.cypher", "r") as f:
-            id_as_prop = f.read()
+        with open(Path(__file__).parent / "queries/v5_id_as_prop.cypher", "r") as f:
+            v5_id_as_prop = f.read()
+        with open(Path(__file__).parent / "queries/v4_id_as_prop.cypher", "r") as f:
+            v4_id_as_prop = f.read()
         with open(Path(__file__).parent / "queries/v5_constraint.cypher", "r") as f:
             v5_contraint = f.read()
         with open(Path(__file__).parent / "queries/v4_constraint.cypher", "r") as f:
@@ -100,11 +102,12 @@ def test_core():
                     session.run(modifiy_node)
                     session.run(modifiy_rel)
                     session.run(lonely_node)
-                    session.run(id_as_prop)
 
                     try:
+                        session.run(v5_id_as_prop)
                         session.run(v5_contraint)
                     except CypherSyntaxError:
+                        session.run(v4_id_as_prop)
                         session.run(v4_contraint)
                     
                     # Extract out data in Neo4j

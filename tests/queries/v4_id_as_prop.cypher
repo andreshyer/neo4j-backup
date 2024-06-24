@@ -5,5 +5,5 @@ SET r.rel_id = ID(r)
 
 WITH COUNT(p) as p
 MATCH (n)
-WHERE NOT (n)-[]-()
+WHERE NOT EXISTS((n)-[]-())
 SET n.node_id = ID(n)

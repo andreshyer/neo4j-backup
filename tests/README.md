@@ -29,4 +29,4 @@ Otherwise, this script can help act as a guide as to what is breaking.
 
 These are the list of different tags that have been directly tested
 
-["4.1.0-community", "4.2.0-community", "4.3.0-community", "4.4.0-community", "5-community", "5.1.0-community", "5.2.0-community", "5.3.0-community", "5.4.0-community", "5.5.0-community", "latest"]
+["4.1.0-community", "4.4.0-community", "5-community", "5.5.0-community", "5.10.0-community", "5.15.0-community", "5.20.0-community", "latest"]

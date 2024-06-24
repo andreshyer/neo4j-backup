@@ -332,12 +332,12 @@ class Extractor:
 
         query = """
         MATCH (n)
-        WHERE NOT (n)-[]-()
+        WHERE NOT EXISTS((n)-[]-())
         RETURN n
         """
 
         with self.driver.session(database=self.database) as session:
-            number_of_nodes = session.run(f"MATCH (n) WHERE NOT (n)-[]-() RETURN COUNT(n)").value()[0]
+            number_of_nodes = session.run(f"MATCH (n) WHERE NOT EXISTS((n)-[]-()) RETURN COUNT(n)").value()[0]
             results = session.run(query)
             for record in tqdm(results, total=number_of_nodes, desc="Extracting Lonely Nodes"):
                 # Base node object
