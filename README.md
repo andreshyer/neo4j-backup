@@ -7,7 +7,8 @@ a Neo4j database in a human-readable format.
 
 This repo is not intended to replace the native Neo4j backup Dump files,
 but rather to be used in instances where a Dump file is not an option.
-Such as moving data from Neo4j to a different type of database.
+Such as moving data from Neo4j to a different type of database,
+or creating a backup for the community edition of Neo4j.
 
 Also, this repository aims to be as simple as possible with two main purposes. 
 To download a Neo4j graph without using a Dump file and to be able to upload that data to a different Neo4j graph.
@@ -22,7 +23,7 @@ and this can be used on the community edition of Neo4j.
 
 This repo differs from most other Neo4j backup repos. 
 For this tool, the Neo4j graph does not need to be a specific instance. 
-This code will work with a Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
+This code will work with any live Neo4j database that is running in Aura, docker, desktop, command-line, server, etc. 
 The only requirements are that the python neo4j-driver needs to be able to connect to the database,
 that your user has read and show constraints privileges for downloading data, and write privileges for importing data.
 
@@ -53,7 +54,7 @@ you can set `input_yes=True` to enter yes to all input questions.
 
 # Constraints
 
-The only constraint that is supported in all insistence of Neo4j are `Unique node property constraints`.
+The only constraint that is supported in all insistences of Neo4j are `Unique node property constraints`.
 Currently, this is the only supported type of constraint in this codebase.
 If you need to transfer the extracted data to an Enterprise edition database,
 the other constraints can be added after importing the data
@@ -145,7 +146,7 @@ This example shows saved data from a Node with complex data types.
 }
 ```
 Note that the `odd_prop` was originally stored as a string in the database.
-Any string stored in the backup that starts with ["$point(", "$date(", "$time(", "$datetime(", "$duration("] 
+Any string stored in the backup that starts with "\$point(", "\$date(", "\$time(", "\$datetime(", or "\$duration("
 represents a temporal or spatial value, and is stored as a literal value.
 Any string that starts with a literal value is assumed to always be either a temporal or spatial value. 
 
@@ -200,13 +201,7 @@ The full list of supported property types to be extracted are:
 Integer, Float, String, Boolean, Point, Date, Time, LocalTime, DateTime, LocalDateTime, and Duration.
 As well as arrays, but arrays are treated as second class properties and have many restrictions in Neo4j.
 
-Temporal values can be saved, but the python-neo4j driver makes no distinction between
-- Time and LocalTime
-- DateTime and LocalDateTime
-
-The only difference with the time zone cannot be specified in local times.
-
-The following point SRID types are supported and saved as:
+For points, the following point SRID types are supported and saved as:
 - 7203 : 2d-cartesian-point
 - 9157 : 3d-cartesian-point
 - 4326 : 2d-WGS-84-point
